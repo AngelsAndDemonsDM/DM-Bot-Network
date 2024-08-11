@@ -23,9 +23,8 @@ class Server:
         self._port: int = port
         self._is_online: bool = False
 
-        self._connection = None
-
-        self._server = None
+        self._connection: Optional[aiosqlite.Connection] = None
+        self._server: Optional[asyncio.AbstractServer] = None
 
         self._db_path: Path = db_path
         self._owner_password: str = owner_password
@@ -54,7 +53,7 @@ class Server:
                 )
                 await self._connection.commit()
 
-    async def _check_password(self, password: str, db_password: bytes):
+    async def _check_password(self, password: str, db_password: bytes) -> bool:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, bcrypt.checkpw, password.encode(), db_password)
     
@@ -156,7 +155,7 @@ class Server:
             logging.error(f"Error changing access for user {username}: {e}")
 
     # Client work
-    async def _req_auth(self, reader: StreamReader, writer: StreamWriter) -> str:
+    async def _req_auth(self, reader: StreamReader, writer: StreamWriter) -> Optional[str]:
         try:
             await self.send_data(writer, {"action": "auth"})
             user_data = await asyncio.wait_for(self.receive_data(reader), timeout=self.TIME_OUT)
