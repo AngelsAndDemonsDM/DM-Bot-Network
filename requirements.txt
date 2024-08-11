@@ -2,3 +2,5 @@ aiosqlite
 bcrypt
 msgpack
 setuptools
+twine
+wheel
