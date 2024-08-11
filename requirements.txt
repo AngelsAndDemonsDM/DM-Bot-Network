@@ -1,0 +1,4 @@
+aiosqlite
+bcrypt
+msgpack
+setuptools
