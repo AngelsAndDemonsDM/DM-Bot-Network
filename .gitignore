@@ -23,3 +23,8 @@ venv.bak/
 # VS and VSC
 .vs/*
 .vscode/*
+
+# build
+build/*
+dist/*
+*egg-info/*
