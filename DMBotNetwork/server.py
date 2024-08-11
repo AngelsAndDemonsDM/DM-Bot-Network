@@ -84,7 +84,7 @@ class Server:
             return method(cls, **valid_kwargs)
 
     # DB work
-    async def _db_login_user(self, login: str, password: str) -> Optional[str]:
+    async def db_login_user(self, login: str, password: str) -> Optional[str]:
         try:
             async with self._connection.execute("SELECT password FROM users WHERE username = ?", (login,)) as cursor:
                 row = await cursor.fetchone()
@@ -101,7 +101,7 @@ class Server:
             logging.error(f"Error logging in user {login}: {e}")
             return None
 
-    async def _db_add_user(self, username: str, password: str, access: Dict[str, bool]) -> None:
+    async def db_add_user(self, username: str, password: str, access: Dict[str, bool]) -> None:
         hashed_password = await self._hash_password(password)
         packed_access = msgpack.packb(access)
         try:
@@ -113,7 +113,7 @@ class Server:
         except Exception as e:
             logging.error(f"Error adding user {username}: {e}")
 
-    async def _db_get_access(self, username: str) -> Optional[Dict[str, bool]]:
+    async def db_get_access(self, username: str) -> Optional[Dict[str, bool]]:
         try:
             async with self._connection.execute("SELECT access FROM users WHERE username = ?", (username,)) as cursor:
                 row = await cursor.fetchone()
@@ -124,14 +124,14 @@ class Server:
             logging.error(f"Error getting access for user {username}: {e}")
             return None
 
-    async def _db_delete_user(self, username: str) -> None:
+    async def db_delete_user(self, username: str) -> None:
         try:
             await self._connection.execute("DELETE FROM users WHERE username = ?", (username,))
             await self._connection.commit()
         except Exception as e:
             logging.error(f"Error deleting user {username}: {e}")
 
-    async def _db_change_password(self, username: str, new_password: str) -> None:
+    async def db_change_password(self, username: str, new_password: str) -> None:
         hashed_password = await self._hash_password(new_password)
         try:
             await self._connection.execute("UPDATE users SET password = ? WHERE username = ?", (hashed_password, username))
@@ -139,7 +139,7 @@ class Server:
         except Exception as e:
             logging.error(f"Error changing password for user {username}: {e}")
 
-    async def _db_change_access(self, username: str, new_access: Optional[Dict[str, bool]] = None) -> None:
+    async def db_change_access(self, username: str, new_access: Optional[Dict[str, bool]] = None) -> None:
         if username == "owner":
             new_access = {"full_access": True}
 
@@ -169,7 +169,7 @@ class Server:
                 await self.send_data(writer, {"action": "log", "log_type": "error", "msg": "Data must contain 'login' and 'password'."})
                 return None
 
-            return await self._db_login_user(user_data['login'], user_data['password'])
+            return await self.db_login_user(user_data['login'], user_data['password'])
 
         except asyncio.TimeoutError:
             await self.send_data(writer, {"action": "log", "log_type": "error", "msg": "Timeout error."})
