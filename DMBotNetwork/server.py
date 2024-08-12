@@ -439,6 +439,9 @@ class Server:
                 logging.info(f'Server started on {self._host}:{self._port}')
                 await self._server.serve_forever()
         
+        except asyncio.exceptions.CancelledError:
+            await self.stop()
+        
         except Exception as e:
             logging.error(f"Error starting server: {e}")
             await self.stop()
