@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import logging
 from asyncio import StreamReader, StreamWriter
 from typing import Any, Dict, Optional
 
@@ -10,15 +11,15 @@ class Client:
     _net_methods: Dict[str, Any] = {}
 
     def __init__(self, host: str, port: int, login: str, password: str) -> None:
-        self._host: str = host
-        self._port: int = port
-        self._login: str = login
-        self._password: str = password
+        self._host = host
+        self._port = port
+        self._login = login
+        self._password = password
 
         self._reader: Optional[StreamReader] = None
         self._writer: Optional[StreamWriter] = None
 
-        self._is_connected: bool = False
+        self._is_connected = False
         self._listen_task: Optional[asyncio.Task] = None
 
     def __init_subclass__(cls, **kwargs):
@@ -29,34 +30,47 @@ class Client:
 
     @classmethod
     async def _call_net_method(cls, method_name: str, **kwargs) -> Any:
-        if method_name not in cls._net_methods:
+        method = cls._net_methods.get(method_name)
+        if method is None:
             return None
-
-        method = cls._net_methods[method_name]
 
         sig = inspect.signature(method)
         valid_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
 
-        if inspect.iscoroutinefunction(method):
-            return await method(cls, **valid_kwargs)
-        else:
-            return method(cls, **valid_kwargs)
+        try:
+            if inspect.iscoroutinefunction(method):
+                return await method(cls, **valid_kwargs)
+            else:
+                return method(cls, **valid_kwargs)
+        
+        except Exception as e:
+            logging.error(f"Error calling net method {method_name}: {e}")
+            return None
 
     async def _connect(self) -> None:
-        self._reader, self._writer = await asyncio.open_connection(self._host, self._port)
+        try:
+            self._reader, self._writer = await asyncio.open_connection(self._host, self._port)
+            self._is_connected = True
+        
+        except Exception as e:
+            logging.error(f"Error connecting to server: {e}")
+            self._is_connected = False
 
     async def _close(self) -> None:
         self._is_connected = False
 
         if self._writer:
-            self._writer.close()
-            await self._writer.wait_closed()
+            try:
+                self._writer.close()
+                await self._writer.wait_closed()
+            
+            except Exception as e:
+                logging.error(f"Error closing connection: {e}")
 
         if self._listen_task:
             self._listen_task.cancel()
             try:
                 await self._listen_task
-            
             except asyncio.CancelledError:
                 pass
 
@@ -64,41 +78,58 @@ class Client:
         if not self._writer:
             raise ConnectionError("Not connected to server")
 
-        packed_data = msgpack.packb(data)
-        self._writer.write(len(packed_data).to_bytes(4, byteorder='big'))
-        await self._writer.drain()
+        try:
+            packed_data = msgpack.packb(data)
+            self._writer.write(len(packed_data).to_bytes(4, byteorder='big'))
+            await self._writer.drain()
 
-        self._writer.write(packed_data)
-        await self._writer.drain()
+            self._writer.write(packed_data)
+            await self._writer.drain()
+        
+        except Exception as e:
+            logging.error(f"Error sending data: {e}")
 
     async def receive_data(self) -> Any:
         if not self._reader:
             raise ConnectionError("Not connected to server")
 
-        data_size_bytes = await self._reader.readexactly(4)
-        data_size = int.from_bytes(data_size_bytes, 'big')
+        try:
+            data_size_bytes = await self._reader.readexactly(4)
+            data_size = int.from_bytes(data_size_bytes, 'big')
 
-        packed_data = await self._reader.readexactly(data_size)
+            packed_data = await self._reader.readexactly(data_size)
 
-        return msgpack.unpackb(packed_data)
+            return msgpack.unpackb(packed_data)
+        
+        except Exception as e:
+            logging.error(f"Error receiving data: {e}")
+            return None
 
     async def authenticate(self) -> bool:
         await self._connect()
+
+        if not self._is_connected:
+            return False
 
         auth_data = {
             "login": self._login,
             "password": self._password
         }
 
-        await self.send_data(auth_data)
+        try:
+            await self.send_data(auth_data)
+            response = await self.receive_data()
 
-        response = await self.receive_data()
-        if isinstance(response, dict) and response.get("action") == "log" and response.get("log_type") == "info":
-            self._listen_task = asyncio.create_task(self.listen_for_messages())
-            self._is_connected = True
-            return True
-
-        else:
+            if isinstance(response, dict) and response.get("action") == "log" and response.get("log_type") == "info":
+                self._listen_task = asyncio.create_task(self.listen_for_messages())
+                return True
+            
+            else:
+                await self._close()
+                return False
+        
+        except Exception as e:
+            logging.error(f"Error during authentication: {e}")
             await self._close()
             return False
 
@@ -112,20 +143,28 @@ class Client:
             **kwargs
         }
 
-        await self.send_data(request_data)
-        return await self.receive_data()
+        try:
+            await self.send_data(request_data)
+            return await self.receive_data()
+        
+        except Exception as e:
+            logging.error(f"Error requesting net method {net_type}: {e}")
+            return None
 
     async def listen_for_messages(self) -> None:
         while self._is_connected:
-            server_data = await self.receive_data()
-
-            if isinstance(server_data, dict):
-                action_type = server_data.get('action', None)
-                if not action_type:
-                    raise ValueError(f"Unexpected answer from server: {server_data}")
-
-                if action_type == 'net':
-                    await Client._call_net_method(server_data.get('net_type'), **server_data)
+            try:
+                server_data = await self.receive_data()
+                if isinstance(server_data, dict):
+                    action_type = server_data.get('action')
+                    if action_type == 'net':
+                        await Client._call_net_method(server_data.get('net_type'), **server_data)
+                    else:
+                        logging.warning(f"Unexpected action type from server: {action_type}")
+            
+            except Exception as e:
+                logging.error(f"Error in listen_for_messages: {e}")
+                await self._close()
 
     async def close_connection(self) -> None:
         await self._close()

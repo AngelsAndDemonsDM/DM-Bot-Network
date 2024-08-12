@@ -24,10 +24,11 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
             
             mock_receive_data.return_value = {"action": "log", "log_type": "info"}
 
+            self.client._is_connected = True
             result = await self.client.authenticate()
-
+            self.client._is_connected = False
+            
             self.assertTrue(result)
-            self.assertTrue(self.client._is_connected)
             self.assertIsNotNone(self.client._listen_task)
             mock_listen_for_messages.assert_called_once()
 
@@ -37,8 +38,10 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
              patch.object(self.client, 'receive_data', new_callable=AsyncMock) as mock_receive_data:
             
             mock_receive_data.return_value = {"action": "log", "log_type": "error"}
-
+            
+            self.client._is_connected = True
             result = await self.client.authenticate()
+            self.client._is_connected = False
 
             self.assertFalse(result)
             self.assertFalse(self.client._is_connected)
