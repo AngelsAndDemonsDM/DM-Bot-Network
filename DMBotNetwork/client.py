@@ -6,11 +6,18 @@ from typing import Any, Dict, Optional
 
 import msgpack
 
-
 class Client:
     _net_methods: Dict[str, Any] = {}
 
     def __init__(self, host: str, port: int, login: str, password: str) -> None:
+        """Инициализирует объект клиента с указанием хоста, порта, логина и пароля.
+
+        Args:
+            host (str): Хост сервера.
+            port (int): Порт сервера.
+            login (str): Логин для аутентификации.
+            password (str): Пароль для аутентификации.
+        """
         self._host = host
         self._port = port
         self._login = login
@@ -23,6 +30,11 @@ class Client:
         self._listen_task: Optional[asyncio.Task] = None
 
     def __init_subclass__(cls, **kwargs):
+        """Автоматически регистрирует методы, начинающиеся с 'net_', как сетевые методы.
+
+        Args:
+            **kwargs: Дополнительные аргументы.
+        """
         super().__init_subclass__(**kwargs)
         for method in dir(cls):
             if callable(getattr(cls, method)) and method.startswith("net_"):
@@ -30,6 +42,14 @@ class Client:
 
     @classmethod
     async def _call_net_method(cls, method_name: str, **kwargs) -> Any:
+        """Вызывает зарегистрированный сетевой метод.
+
+        Args:
+            method_name (str): Название сетевого метода.
+
+        Returns:
+            Any: Результат выполнения метода или None, если метод не найден.
+        """
         method = cls._net_methods.get(method_name)
         if method is None:
             return None
@@ -48,6 +68,7 @@ class Client:
             return None
 
     async def _connect(self) -> None:
+        """Устанавливает соединение с сервером."""
         try:
             self._reader, self._writer = await asyncio.open_connection(self._host, self._port)
             self._is_connected = True
@@ -57,6 +78,7 @@ class Client:
             self._is_connected = False
 
     async def _close(self) -> None:
+        """Закрывает соединение с сервером."""
         self._is_connected = False
 
         if self._writer:
@@ -75,6 +97,14 @@ class Client:
                 pass
 
     async def send_data(self, data: Any) -> None:
+        """Отправляет данные на сервер.
+
+        Args:
+            data (Any): Данные для отправки.
+
+        Raises:
+            ConnectionError: Если соединение с сервером не установлено.
+        """
         if not self._writer:
             raise ConnectionError("Not connected to server")
 
@@ -90,6 +120,14 @@ class Client:
             logging.error(f"Error sending data: {e}")
 
     async def receive_data(self) -> Any:
+        """Получает данные с сервера.
+
+        Raises:
+            ConnectionError: Если соединение с сервером не установлено.
+
+        Returns:
+            Any: Распакованные данные или None в случае ошибки.
+        """
         if not self._reader:
             raise ConnectionError("Not connected to server")
 
@@ -106,6 +144,11 @@ class Client:
             return None
 
     async def authenticate(self) -> bool:
+        """Аутентифицирует клиента на сервере.
+
+        Returns:
+            bool: True, если аутентификация успешна, иначе False.
+        """
         await self._connect()
 
         if not self._is_connected:
@@ -134,6 +177,17 @@ class Client:
             return False
 
     async def request_net_method(self, net_type: str, **kwargs) -> Any:
+        """Запрашивает выполнение сетевого метода на сервере.
+
+        Args:
+            net_type (str): Тип сетевого метода.
+
+        Raises:
+            ConnectionError: Если соединение с сервером не установлено.
+
+        Returns:
+            Any: Результат выполнения сетевого метода или None в случае ошибки.
+        """
         if not self._writer:
             raise ConnectionError("Not connected to server")
 
@@ -152,6 +206,7 @@ class Client:
             return None
 
     async def listen_for_messages(self) -> None:
+        """Слушает входящие сообщения от сервера и обрабатывает их."""
         while self._is_connected:
             try:
                 server_data = await self.receive_data()
@@ -167,4 +222,5 @@ class Client:
                 await self._close()
 
     async def close_connection(self) -> None:
+        """Закрывает соединение с сервером."""
         await self._close()
