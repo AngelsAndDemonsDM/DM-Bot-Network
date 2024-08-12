@@ -17,6 +17,14 @@ class Server:
     TIME_OUT: float = 30.0
 
     def __init__(self, host: str, port: int, db_path: Path, owner_password: str = 'owner_password') -> None:
+        """Инициализирует сервер с указанными параметрами.
+
+        Args:
+            host (str): Хост, на котором будет запущен сервер.
+            port (int): Порт, на котором будет запущен сервер.
+            db_path (Path): Путь к директории для хранения базы данных.
+            owner_password (str, optional): Пароль владельца. По умолчанию 'owner_password'.
+        """
         self._host = host
         self._port = port
         
@@ -28,6 +36,8 @@ class Server:
         self._owner_password = owner_password
 
     async def _init_db(self) -> None:
+        """Инициализирует базу данных, создавая необходимые таблицы, если они не существуют.
+        Также добавляет пользователя 'owner' с полным доступом, если он отсутствует."""
         try:
             self._connection = await aiosqlite.connect(self._db_path / "server.db")
             await self._connection.execute("""
@@ -52,6 +62,14 @@ class Server:
             raise
 
     async def _user_exists(self, username: str) -> bool:
+        """Проверяет, существует ли пользователь в базе данных.
+
+        Args:
+            username (str): Имя пользователя для проверки.
+
+        Returns:
+            bool: True, если пользователь существует, иначе False.
+        """
         try:
             async with self._connection.execute("SELECT 1 FROM users WHERE username = ?", (username,)) as cursor:
                 return await cursor.fetchone() is not None
@@ -61,14 +79,32 @@ class Server:
             return False
 
     async def _check_password(self, password: str, db_password: bytes) -> bool:
+        """Проверяет соответствие пароля пользователя с хешем из базы данных.
+
+        Args:
+            password (str): Введенный пользователем пароль.
+            db_password (bytes): Хеш пароля из базы данных.
+
+        Returns:
+            bool: True, если пароли совпадают, иначе False.
+        """
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, bcrypt.checkpw, password.encode(), db_password)
     
     async def _hash_password(self, password: str) -> bytes:
+        """Генерирует хеш пароля для безопасного хранения в базе данных.
+
+        Args:
+            password (str): Пароль для хеширования.
+
+        Returns:
+            bytes: Хеш пароля.
+        """
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, bcrypt.hashpw, password.encode(), bcrypt.gensalt())
 
     def __init_subclass__(cls, **kwargs):
+        """Инициализация подклассов сервера. Автоматически регистрирует все методы, начинающиеся с 'net_'."""
         super().__init_subclass__(**kwargs)
         for method in dir(cls):
             if callable(getattr(cls, method)) and method.startswith("net_"):
@@ -76,6 +112,14 @@ class Server:
 
     @classmethod
     async def _call_net_method(cls, method_name: str, **kwargs) -> Any:
+        """Вызывает зарегистрированный сетевой метод по его имени.
+
+        Args:
+            method_name (str): Имя метода для вызова.
+
+        Returns:
+            Any: Результат выполнения метода, если найден, иначе None.
+        """
         method = cls._net_methods.get(method_name)
         if method is None:
             logging.error(f"Net method {method_name} not found.")
@@ -95,6 +139,15 @@ class Server:
             return None
 
     async def db_login_user(self, login: str, password: str) -> Optional[str]:
+        """Проверяет учетные данные пользователя и возвращает логин, если они верны.
+
+        Args:
+            login (str): Логин пользователя.
+            password (str): Пароль пользователя.
+
+        Returns:
+            Optional[str]: Логин пользователя, если учетные данные верны, иначе None.
+        """
         try:
             async with self._connection.execute("SELECT password FROM users WHERE username = ?", (login,)) as cursor:
                 row = await cursor.fetchone()
@@ -108,6 +161,16 @@ class Server:
             return None
 
     async def db_add_user(self, username: str, password: str, access: Dict[str, bool]) -> bool:
+        """Добавляет нового пользователя в базу данных.
+
+        Args:
+            username (str): Логин нового пользователя.
+            password (str): Пароль нового пользователя.
+            access (Dict[str, bool]): Словарь прав доступа пользователя.
+
+        Returns:
+            bool: True, если пользователь успешно добавлен, иначе False.
+        """
         hashed_password = await self._hash_password(password)
         packed_access = msgpack.packb(access)
         try:
@@ -123,6 +186,14 @@ class Server:
             return False
 
     async def db_get_access(self, username: str) -> Optional[Dict[str, bool]]:
+        """Возвращает права доступа пользователя.
+
+        Args:
+            username (str): Логин пользователя.
+
+        Returns:
+            Optional[Dict[str, bool]]: Словарь прав доступа пользователя, если он существует, иначе None.
+        """
         try:
             async with self._connection.execute("SELECT access FROM users WHERE username = ?", (username,)) as cursor:
                 row = await cursor.fetchone()
@@ -135,6 +206,14 @@ class Server:
             return None
 
     async def db_delete_user(self, username: str) -> bool:
+        """Удаляет пользователя из базы данных.
+
+        Args:
+            username (str): Логин пользователя для удаления.
+
+        Returns:
+            bool: True, если пользователь успешно удален, иначе False.
+        """
         try:
             await self._connection.execute("DELETE FROM users WHERE username = ?", (username,))
             await self._connection.commit()
@@ -145,6 +224,15 @@ class Server:
             return False
 
     async def db_change_password(self, username: str, new_password: str) -> bool:
+        """Изменяет пароль пользователя.
+
+        Args:
+            username (str): Логин пользователя.
+            new_password (str): Новый пароль пользователя.
+
+        Returns:
+            bool: True, если пароль успешно изменен, иначе False.
+        """
         hashed_password = await self._hash_password(new_password)
         try:
             await self._connection.execute("UPDATE users SET password = ? WHERE username = ?", (hashed_password, username))
@@ -156,6 +244,15 @@ class Server:
             return False
 
     async def db_change_access(self, username: str, new_access: Optional[Dict[str, bool]] = None) -> bool:
+        """Изменяет права доступа пользователя.
+
+        Args:
+            username (str): Логин пользователя.
+            new_access (Optional[Dict[str, bool]], optional): Новый словарь прав доступа. По умолчанию None.
+
+        Returns:
+            bool: True, если права успешно изменены, иначе False.
+        """
         if username == "owner":
             new_access = {"full_access": True}
 
@@ -174,17 +271,44 @@ class Server:
             return False
 
     async def check_access_login(self, username: str, need_access: List[str]) -> bool:
+        """Проверяет, есть ли у пользователя необходимые права доступа.
+
+        Args:
+            username (str): Логин пользователя.
+            need_access (List[str]): Список прав, которые необходимо проверить.
+
+        Returns:
+            bool: True, если пользователь обладает всеми необходимыми правами, иначе False.
+        """
         access_dict = await self.db_get_access(username)
         return self.check_access(access_dict, need_access) if access_dict else False
     
     @staticmethod
     def check_access(access_dict: Dict[str, bool], need_access: List[str]) -> bool:
+        """Проверяет, имеет ли пользователь необходимые права.
+
+        Args:
+            access_dict (Dict[str, bool]): Словарь прав доступа пользователя.
+            need_access (List[str]): Список прав, которые необходимо проверить.
+
+        Returns:
+            bool: True, если все права присутствуют, иначе False.
+        """
         if access_dict.get("full_access", False):
             return True
         
         return all(access_dict.get(access, False) for access in need_access)
     
     async def _req_auth(self, reader: StreamReader, writer: StreamWriter) -> Optional[str]:
+        """Запрашивает аутентификацию пользователя.
+
+        Args:
+            reader (StreamReader): Объект для чтения данных от клиента.
+            writer (StreamWriter): Объект для отправки данных клиенту.
+
+        Returns:
+            Optional[str]: Логин пользователя, если аутентификация успешна, иначе None.
+        """
         try:
             await self.send_data(writer, {"action": "auth"})
             user_data = await asyncio.wait_for(self.receive_data(reader), timeout=self.TIME_OUT)
@@ -205,6 +329,12 @@ class Server:
             return None
 
     async def _client_handle(self, reader: StreamReader, writer: StreamWriter) -> None:
+        """Основной цикл обработки запросов от клиента после успешной аутентификации.
+
+        Args:
+            reader (StreamReader): Объект для чтения данных от клиента.
+            writer (StreamWriter): Объект для отправки данных клиенту.
+        """
         login = await self._req_auth(reader, writer)
         if not login:
             await self._close_connect(writer)
@@ -228,6 +358,12 @@ class Server:
         await self._close_connect(writer, login)
 
     async def _close_connect(self, writer: StreamWriter, login: Optional[str] = None) -> None:
+        """Закрывает соединение с клиентом и удаляет его из списка активных подключений.
+
+        Args:
+            writer (StreamWriter): Объект для отправки данных клиенту.
+            login (Optional[str], optional): Логин пользователя. По умолчанию None.
+        """
         if login and login in self._connects:
             del self._connects[login]
 
@@ -239,12 +375,27 @@ class Server:
             logging.error(f"Error closing connection for {login}: {e}")
 
     async def send_data_login(self, login: str, data: Any) -> None:
+        """Отправляет данные пользователю по его логину.
+
+        Args:
+            login (str): Логин пользователя.
+            data (Any): Данные для отправки.
+
+        Raises:
+            ValueError: Если пользователь с указанным логином не подключен.
+        """
         if login not in self._connects:
             raise ValueError("Unknown login")
 
         await self.send_data(self._connects[login], data)
 
     async def send_data(self, writer: StreamWriter, data: Any) -> None:
+        """Отправляет данные клиенту.
+
+        Args:
+            writer (StreamWriter): Объект для отправки данных клиенту.
+            data (Any): Данные для отправки.
+        """
         try:
             packed_data = msgpack.packb(data)
             writer.write(len(packed_data).to_bytes(4, byteorder='big'))
@@ -257,6 +408,14 @@ class Server:
             logging.error(f"Error sending data: {e}")
 
     async def receive_data(self, reader: StreamReader) -> Any:
+        """Получает данные от клиента.
+
+        Args:
+            reader (StreamReader): Объект для чтения данных от клиента.
+
+        Returns:
+            Any: Распакованные данные, полученные от клиента.
+        """
         try:
             data_size_bytes = await reader.readexactly(4)
             data_size = int.from_bytes(data_size_bytes, 'big')
@@ -268,6 +427,7 @@ class Server:
             return None
 
     async def start(self) -> None:
+        """Запускает сервер и начинает прослушивание входящих подключений."""
         try:
             await self._init_db()
 
@@ -284,6 +444,7 @@ class Server:
             await self.stop()
 
     async def stop(self) -> None:
+        """Останавливает сервер и закрывает все активные подключения."""
         self._is_online = False
 
         for login, writer in self._connects.items():
