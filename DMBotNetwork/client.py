@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 import msgpack
 
+
 class Client:
     _net_methods: Dict[str, Any] = {}
 
