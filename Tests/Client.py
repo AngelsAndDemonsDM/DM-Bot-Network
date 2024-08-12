@@ -1,4 +1,6 @@
+import shutil
 import unittest
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 from DMBotNetwork.client import Client
@@ -6,7 +8,12 @@ from DMBotNetwork.client import Client
 
 class TestClient(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.client = Client('localhost', 12345, 'user', 'pass')
+        self.test_dir = Path("test_dir")
+        self.test_dir.mkdir(parents=True, exist_ok=True)
+        self.client = Client('localhost', 12345, 'user', 'pass', self.test_dir)
+
+    async def asyncTearDown(self):
+        shutil.rmtree(self.test_dir)
 
     async def test_connect(self):
         with patch('asyncio.open_connection', new_callable=AsyncMock) as mock_open_connection:
@@ -22,14 +29,15 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
              patch.object(self.client, 'receive_data', new_callable=AsyncMock) as mock_receive_data, \
              patch.object(self.client, 'listen_for_messages', new_callable=AsyncMock) as mock_listen_for_messages:
             
-            mock_receive_data.return_value = {"action": "log", "log_type": "info"}
+            mock_receive_data.return_value = {"action": "log", "log_type": "info", 'server_name': "dev_server"}
 
             self.client._is_connected = True
-            result = await self.client.authenticate()
+            result = await self.client._authenticate()
             self.client._is_connected = False
             
             self.assertTrue(result)
             self.assertIsNotNone(self.client._listen_task)
+            self.assertEqual(self.client._cur_server_name, "dev_server")
             mock_listen_for_messages.assert_called_once()
 
     async def test_authenticate_failure(self):
@@ -40,7 +48,7 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
             mock_receive_data.return_value = {"action": "log", "log_type": "error"}
             
             self.client._is_connected = True
-            result = await self.client.authenticate()
+            result = await self.client._authenticate()
             self.client._is_connected = False
 
             self.assertFalse(result)

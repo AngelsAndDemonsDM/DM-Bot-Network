@@ -13,11 +13,12 @@ logger = logging.getLogger("DMBotNetwork Server")
 
 class Server:
     _net_methods: Dict[str, Any] = {}
+    _download_methods: Dict[str, Any] = {}
     _connects: Dict[str, StreamWriter] = {}
     BASE_ACCESS: Dict[str, bool] = {}
     TIME_OUT: float = 30.0
 
-    def __init__(self, host: str, port: int, db_path: Path, owner_password: str = 'owner_password') -> None:
+    def __init__(self, host: str, port: int, db_path: Path, owner_password: str = 'owner_password', server_name: str = "dev_server") -> None:
         """Инициализирует сервер с указанными параметрами.
 
         Args:
@@ -28,6 +29,7 @@ class Server:
         """
         self._host = host
         self._port = port
+        self._server_name = server_name
         
         self._is_online = False
         self._connection: Optional[aiosqlite.Connection] = None
@@ -105,23 +107,28 @@ class Server:
         return await loop.run_in_executor(None, bcrypt.hashpw, password.encode(), bcrypt.gensalt())
 
     def __init_subclass__(cls, **kwargs):
-        """Инициализация подклассов сервера. Автоматически регистрирует все методы, начинающиеся с 'net_'."""
+        """Инициализация подклассов сервера. Автоматически регистрирует все методы, начинающиеся с 'net_' или с 'download_'."""
         super().__init_subclass__(**kwargs)
         for method in dir(cls):
             if callable(getattr(cls, method)) and method.startswith("net_"):
                 Server._net_methods[method[4:]] = getattr(cls, method)
+        
+        for method in dir(cls):
+            if callable(getattr(cls, method)) and method.startswith("download_"):
+                Server._download_methods[method[9:]] = getattr(cls, method)
 
     @classmethod
-    async def _call_net_method(cls, method_name: str, **kwargs) -> Any:
-        """Вызывает зарегистрированный сетевой метод по его имени.
+    async def _call_method(cls, metods_dict: Dict[str, Any], method_name: str, **kwargs) -> Any:
+        """Вызывает зарегистрированный метод по его имени.
 
         Args:
+            metods_dict (Dict[str, Any]): Словарь из которого будут вызываться
             method_name (str): Имя метода для вызова.
 
         Returns:
             Any: Результат выполнения метода, если найден, иначе None.
         """
-        method = cls._net_methods.get(method_name)
+        method = metods_dict.get(method_name)
         if method is None:
             logger.error(f"Net method {method_name} not found.")
             return None
@@ -315,7 +322,7 @@ class Server:
             user_data = await asyncio.wait_for(self.receive_data(reader), timeout=self.TIME_OUT)
 
             if not isinstance(user_data, dict) or 'login' not in user_data or 'password' not in user_data:
-                await self.send_data(writer, {"action": "log", "log_type": "error", "msg": "Invalid authentication data."})
+                await self.send_data(writer, {"action": "log", "log_type": "error", "msg": "Invalid authentication data.", 'server_name': self._server_name})
                 return None
 
             return await self.db_login_user(user_data['login'], user_data['password'])
@@ -350,8 +357,11 @@ class Server:
                 if isinstance(user_data, dict):
                     action_type = user_data.get('action', None)
                     if action_type == "net":
-                        answer = await Server._call_net_method(user_data.get('net_type'), user_login=login, **user_data)
+                        answer = await Server._call_method(self._net_methods, user_data.get('type'), user_login=login, **user_data)
                         await self.send_data(writer, answer)
+                    
+                    if action_type == "download":
+                        await Server._call_method(self._download_methods, user_data.get('type'), user_login=login, **user_data)
         
         except Exception as e:
             logger.error(f"Error in client handling loop: {e}")
@@ -389,6 +399,37 @@ class Server:
             raise ValueError("Unknown login")
 
         await self.send_data(self._connects[login], data)
+
+
+    async def send_data_login(self, login: str, path: Path, file_name: str) -> None:
+        if login not in self._connects:
+            raise ValueError("Unknown login")
+
+        await self.send_file(self._connects[login], path, file_name)
+
+    async def send_file(self, writer: StreamWriter, path: Path, file_name: str) -> None:
+        """Отправляет файл пользователю через writer.
+
+        Args:
+            writer (StreamWriter): Поток, через который отправляются данные.
+            path (Path): Путь файла, который надо отправить.
+            file_name (str): Имя файла для передачи.
+
+        Raises:
+            Exception: В случае ошибки отправки данных.
+        """
+        try:
+            file_size = path.stat().st_size
+
+            file_info = {'req': 'download', 'file_size': file_size, 'file_name': file_name}
+            await self.send_data(writer, file_info)
+
+            with open(path, "rb") as file:
+                while chunk := file.read(1024 * 1024):  # Чтение порции в 1 МБ
+                    await self.send_data(writer, chunk)
+
+        except Exception as e:
+            logger.error(f"Error sending data: {e}")
 
     async def send_data(self, writer: StreamWriter, data: Any) -> None:
         """Отправляет данные клиенту.
