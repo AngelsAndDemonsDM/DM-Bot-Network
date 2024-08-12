@@ -400,8 +400,7 @@ class Server:
 
         await self.send_data(self._connects[login], data)
 
-
-    async def send_data_login(self, login: str, path: Path, file_name: str) -> None:
+    async def send_file_login(self, login: str, path: Path, file_name: str) -> None:
         if login not in self._connects:
             raise ValueError("Unknown login")
 

@@ -260,8 +260,10 @@ class Client:
         if not file_name:
             return
         
-        file_path: Path = self._server_file_path / self._cur_server_name / file_name
-        file_path.mkdir(parents=True, exist_ok=True)
+        dir_path = self._server_file_path / self._cur_server_name
+        dir_path.mkdir(parents=True, exist_ok=True)
+        file_path = dir_path / file_name
+
         
         with open(file_path, "wb") as file:
             received_size = 0
