@@ -24,7 +24,7 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(self.client._writer)
 
     async def test_authenticate_success(self):
-        with patch.object(self.client, '_connect', new_callable=AsyncMock), \
+        with patch.object(self.client, 'connect', new_callable=AsyncMock), \
              patch.object(self.client, 'send_data', new_callable=AsyncMock), \
              patch.object(self.client, 'receive_data', new_callable=AsyncMock) as mock_receive_data, \
              patch.object(self.client, 'listen_for_messages', new_callable=AsyncMock) as mock_listen_for_messages:
@@ -41,7 +41,7 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
             mock_listen_for_messages.assert_called_once()
 
     async def test_authenticate_failure(self):
-        with patch.object(self.client, '_connect', new_callable=AsyncMock), \
+        with patch.object(self.client, 'connect', new_callable=AsyncMock), \
              patch.object(self.client, 'send_data', new_callable=AsyncMock), \
              patch.object(self.client, 'receive_data', new_callable=AsyncMock) as mock_receive_data:
             
