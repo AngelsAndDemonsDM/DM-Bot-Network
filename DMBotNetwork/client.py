@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 import msgpack
 
+logger = logging.getLogger("DMBotNetwork Client")
 
 class Client:
     _net_methods: Dict[str, Any] = {}
@@ -53,6 +54,7 @@ class Client:
         """
         method = cls._net_methods.get(method_name)
         if method is None:
+            logger.error(f"Net method {method_name} not found.")
             return None
 
         sig = inspect.signature(method)
@@ -65,7 +67,7 @@ class Client:
                 return method(cls, **valid_kwargs)
         
         except Exception as e:
-            logging.error(f"Error calling net method {method_name}: {e}")
+            logger.error(f"Error calling method {method_name}: {e}")
             return None
 
     async def _connect(self) -> None:
@@ -75,7 +77,7 @@ class Client:
             self._is_connected = True
         
         except Exception as e:
-            logging.error(f"Error connecting to server: {e}")
+            logger.error(f"Error connecting to server: {e}")
             self._is_connected = False
 
     async def _close(self) -> None:
@@ -88,7 +90,7 @@ class Client:
                 await self._writer.wait_closed()
             
             except Exception as e:
-                logging.error(f"Error closing connection: {e}")
+                logger.error(f"Error closing connection: {e}")
 
         if self._listen_task:
             self._listen_task.cancel()
@@ -118,7 +120,7 @@ class Client:
             await self._writer.drain()
         
         except Exception as e:
-            logging.error(f"Error sending data: {e}")
+            logger.error(f"Error sending data: {e}")
 
     async def receive_data(self) -> Any:
         """Получает данные с сервера.
@@ -141,7 +143,7 @@ class Client:
             return msgpack.unpackb(packed_data)
         
         except Exception as e:
-            logging.error(f"Error receiving data: {e}")
+            logger.error(f"Error receiving data: {e}")
             return None
 
     async def authenticate(self) -> bool:
@@ -173,7 +175,7 @@ class Client:
                 return False
         
         except Exception as e:
-            logging.error(f"Error during authentication: {e}")
+            logger.error(f"Error during authentication: {e}")
             await self._close()
             return False
 
@@ -219,7 +221,7 @@ class Client:
                         logging.warning(f"Unexpected action type from server: {action_type}")
             
             except Exception as e:
-                logging.error(f"Error in listen_for_messages: {e}")
+                logger.error(f"Error in listen_for_messages: {e}")
                 await self._close()
 
     async def close_connection(self) -> None:

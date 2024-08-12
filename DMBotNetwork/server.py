@@ -9,6 +9,7 @@ import aiosqlite
 import bcrypt
 import msgpack
 
+logger = logging.getLogger("DMBotNetwork Server")
 
 class Server:
     _net_methods: Dict[str, Any] = {}
@@ -58,7 +59,7 @@ class Server:
                 await self._connection.commit()
 
         except Exception as e:
-            logging.error(f"Error initializing database: {e}")
+            logger.error(f"Error initializing database: {e}")
             raise
 
     async def _user_exists(self, username: str) -> bool:
@@ -75,7 +76,7 @@ class Server:
                 return await cursor.fetchone() is not None
         
         except Exception as e:
-            logging.error(f"Error checking if user exists: {e}")
+            logger.error(f"Error checking if user exists: {e}")
             return False
 
     async def _check_password(self, password: str, db_password: bytes) -> bool:
@@ -122,7 +123,7 @@ class Server:
         """
         method = cls._net_methods.get(method_name)
         if method is None:
-            logging.error(f"Net method {method_name} not found.")
+            logger.error(f"Net method {method_name} not found.")
             return None
 
         sig = inspect.signature(method)
@@ -135,7 +136,7 @@ class Server:
                 return method(cls, **valid_kwargs)
         
         except Exception as e:
-            logging.error(f"Error calling net method {method_name}: {e}")
+            logger.error(f"Error calling method {method_name}: {e}")
             return None
 
     async def db_login_user(self, login: str, password: str) -> Optional[str]:
@@ -157,7 +158,7 @@ class Server:
                 return None
         
         except Exception as e:
-            logging.error(f"Error logging in user {login}: {e}")
+            logger.error(f"Error logger in user {login}: {e}")
             return None
 
     async def db_add_user(self, username: str, password: str, access: Dict[str, bool]) -> bool:
@@ -182,7 +183,7 @@ class Server:
             return True
         
         except Exception as e:
-            logging.error(f"Error adding user {username}: {e}")
+            logger.error(f"Error adding user {username}: {e}")
             return False
 
     async def db_get_access(self, username: str) -> Optional[Dict[str, bool]]:
@@ -202,7 +203,7 @@ class Server:
                 return None
         
         except Exception as e:
-            logging.error(f"Error getting access for user {username}: {e}")
+            logger.error(f"Error getting access for user {username}: {e}")
             return None
 
     async def db_delete_user(self, username: str) -> bool:
@@ -220,7 +221,7 @@ class Server:
             return True
         
         except Exception as e:
-            logging.error(f"Error deleting user {username}: {e}")
+            logger.error(f"Error deleting user {username}: {e}")
             return False
 
     async def db_change_password(self, username: str, new_password: str) -> bool:
@@ -240,7 +241,7 @@ class Server:
             return True
         
         except Exception as e:
-            logging.error(f"Error changing password for user {username}: {e}")
+            logger.error(f"Error changing password for user {username}: {e}")
             return False
 
     async def db_change_access(self, username: str, new_access: Optional[Dict[str, bool]] = None) -> bool:
@@ -267,7 +268,7 @@ class Server:
             return True
         
         except Exception as e:
-            logging.error(f"Error changing access for user {username}: {e}")
+            logger.error(f"Error changing access for user {username}: {e}")
             return False
 
     async def check_access_login(self, username: str, need_access: List[str]) -> bool:
@@ -324,7 +325,7 @@ class Server:
             return None
 
         except Exception as err:
-            logging.error(f"Authentication error: {err}")
+            logger.error(f"Authentication error: {err}")
             await self.send_data(writer, {"action": "log", "log_type": "error", "msg": "Internal server error."})
             return None
 
@@ -353,7 +354,7 @@ class Server:
                         await self.send_data(writer, answer)
         
         except Exception as e:
-            logging.error(f"Error in client handling loop: {e}")
+            logger.error(f"Error in client handling loop: {e}")
 
         await self._close_connect(writer, login)
 
@@ -372,7 +373,7 @@ class Server:
             await writer.wait_closed()
         
         except Exception as e:
-            logging.error(f"Error closing connection for {login}: {e}")
+            logger.error(f"Error closing connection for {login}: {e}")
 
     async def send_data_login(self, login: str, data: Any) -> None:
         """Отправляет данные пользователю по его логину.
@@ -405,7 +406,7 @@ class Server:
             await writer.drain()
         
         except Exception as e:
-            logging.error(f"Error sending data: {e}")
+            logger.error(f"Error sending data: {e}")
 
     async def receive_data(self, reader: StreamReader) -> Any:
         """Получает данные от клиента.
@@ -423,7 +424,7 @@ class Server:
             return msgpack.unpackb(packed_data)
         
         except Exception as e:
-            logging.error(f"Error receiving data: {e}")
+            logger.error(f"Error receiving data: {e}")
             return None
 
     async def start(self) -> None:
@@ -436,14 +437,14 @@ class Server:
             self._server = await asyncio.start_server(self._client_handle, self._host, self._port)
 
             async with self._server:
-                logging.info(f'Server started on {self._host}:{self._port}')
+                logger.info(f'Server started on {self._host}:{self._port}')
                 await self._server.serve_forever()
         
         except asyncio.exceptions.CancelledError:
             await self.stop()
         
         except Exception as e:
-            logging.error(f"Error starting server: {e}")
+            logger.error(f"Error starting server: {e}")
             await self.stop()
 
     async def stop(self) -> None:
@@ -462,4 +463,4 @@ class Server:
         if self._connection:
             await self._connection.close()
 
-        logging.info('Server stopped.')
+        logger.info('Server stopped.')
