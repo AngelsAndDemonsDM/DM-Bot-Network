@@ -14,7 +14,7 @@ class TestServer(unittest.IsolatedAsyncioTestCase):
         self.db_path.mkdir(parents=True, exist_ok=True)
 
         self.server = Server('localhost', 8888, self.db_path, 'test_owner_password')
-        await self.server._init_db(self.db_path, 'test_owner_password')
+        await self.server._init_db()
 
     async def asyncTearDown(self):
         await self.server.stop()
