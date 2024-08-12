@@ -28,3 +28,6 @@ venv.bak/
 build/*
 dist/*
 *egg-info/*
+
+# tests
+test_dir/*

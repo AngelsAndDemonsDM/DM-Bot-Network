@@ -10,7 +10,7 @@ from DMBotNetwork.server import Server
 
 class TestServer(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.db_path = Path("test_db_dir")
+        self.db_path = Path("test_dir")
         self.db_path.mkdir(parents=True, exist_ok=True)
 
         self.server = Server('localhost', 8888, self.db_path, 'test_owner_password')
