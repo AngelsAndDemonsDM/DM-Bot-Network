@@ -19,7 +19,7 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
         with patch('asyncio.open_connection', new_callable=AsyncMock) as mock_open_connection:
             mock_open_connection.return_value = (AsyncMock(), AsyncMock())
 
-            await self.client._connect()
+            await self.client.connect()
             self.assertIsNotNone(self.client._reader)
             self.assertIsNotNone(self.client._writer)
 

@@ -74,7 +74,7 @@ class Client:
             logger.error(f"Error calling method {method_name}: {e}")
             return None
 
-    async def _connect(self) -> None:
+    async def connect(self) -> None:
         """Устанавливает соединение с сервером."""
         try:
             self._reader, self._writer = await asyncio.open_connection(self._host, self._port)
