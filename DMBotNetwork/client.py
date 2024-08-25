@@ -169,8 +169,18 @@ class Client:
 
             return msgpack.unpackb(packed_data)
         
+        except asyncio.IncompleteReadError as e:
+            logger.error(f"Connection closed while receiving data: {e}")
+            await cls._close()
+            return None
+
+        except ConnectionResetError as e:
+            logger.error(f"Connection reset by server: {e}")
+            await cls._close()
+            return None
+
         except Exception as e:
-            logger.error(f"Error receiving data: {e}")
+            logger.error(f"Unexpected error receiving data: {e}")
             return None
 
     @classmethod
