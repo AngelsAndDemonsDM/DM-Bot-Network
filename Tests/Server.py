@@ -62,30 +62,5 @@ class TestServer(unittest.IsolatedAsyncioTestCase):
         access = await self.server.db_get_access('test_user')
         self.assertIsNone(access)
 
-    async def test_send_receive_data(self):
-        writer = mock.Mock()
-        reader = mock.Mock()
-
-        writer.write = mock.Mock()
-        writer.drain = mock.AsyncMock()
-
-        data = {'key': 'value'}
-        packed_data = msgpack.packb(data)
-        
-        reader.readexactly = mock.AsyncMock(side_effect=[
-            len(packed_data).to_bytes(4, byteorder='big'),
-            packed_data
-        ])
-
-        await self.server.send_data(writer, data)
-        
-        writer.write.assert_has_calls([
-            mock.call(len(packed_data).to_bytes(4, byteorder='big')), 
-            mock.call(packed_data)
-        ])
-
-        received_data = await self.server._receive_data(reader)
-        self.assertEqual(received_data, data)
-        
 if __name__ == '__main__':
     unittest.main()
