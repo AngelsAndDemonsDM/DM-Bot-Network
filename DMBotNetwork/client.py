@@ -70,12 +70,35 @@ class Client:
             return
 
         try:
-            cls._reader, cls._writer = await asyncio.open_connection(cls._host, cls._port)
-            cls._is_connected = True
+            cls._listen_task = asyncio.create_task(cls._connect_and_listen())
         
         except Exception as e:
-            logger.error(f"Error connecting to server: {e}")
+            logger.error(f"Error creating connect task: {e}")
+
+    @classmethod
+    async def _connect_and_listen(cls) -> None:
+        """Управляет процессом подключения и прослушивания сообщений в фоне."""
+        try:
+            cls._reader, cls._writer = await asyncio.open_connection(cls._host, cls._port)
+            cls._is_connected = True
+            logger.info("Connected to server")
+            
+            if not await cls._authenticate():
+                logger.error("Authentication failed.")
+                await cls._close()
+                return
+            
+            await cls.listen_for_messages()
+        
+        except Exception as e:
+            logger.error(f"Error in connection and listening: {e}")
             cls._is_connected = False
+            await cls._close()
+
+    @classmethod
+    async def close_connection(cls) -> None:
+        """Закрывает соединение с сервером."""
+        await cls._close()
 
     @classmethod
     async def _close(cls) -> None:
@@ -168,16 +191,13 @@ class Client:
 
             if isinstance(response, dict) and response.get("action") == "log" and response.get("log_type") == "info":
                 cls._cur_server_name = response.get('server_name')
-                cls._listen_task = asyncio.create_task(cls.listen_for_messages())
                 return True
             
             else:
-                await cls._close()
                 return False
         
         except Exception as e:
             logger.error(f"Error during authentication: {e}")
-            await cls._close()
             return False
 
     @classmethod
@@ -298,11 +318,6 @@ class Client:
         
         else:
             logger.warning(f"Unknown log_type: {log_type}. Message: {msg}")
-    
-    @classmethod
-    async def close_connection(cls) -> None:
-        """Закрывает соединение с сервером."""
-        await cls._close()
 
     # Сеттеры и геттеры
     @classmethod
