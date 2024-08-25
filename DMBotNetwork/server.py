@@ -3,7 +3,7 @@ import inspect
 import logging
 from asyncio import StreamReader, StreamWriter
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import aiosqlite
 import bcrypt
@@ -14,7 +14,7 @@ logger = logging.getLogger("DMBotNetwork Server")
 class Server:
     _net_methods: Dict[str, Any] = {}
     _download_methods: Dict[str, Any] = {}
-    _connects: Dict[str, StreamWriter] = {}
+    _connects: Dict[str, Tuple[StreamReader, StreamWriter]] = {}
     BASE_ACCESS: Dict[str, bool] = {}
     TIME_OUT: float = 30.0
 
@@ -337,18 +337,13 @@ class Server:
             return None
 
     async def _client_handle(self, reader: StreamReader, writer: StreamWriter) -> None:
-        """Основной цикл обработки запросов от клиента после успешной аутентификации.
-
-        Args:
-            reader (StreamReader): Объект для чтения данных от клиента.
-            writer (StreamWriter): Объект для отправки данных клиенту.
-        """
+        """Основной цикл обработки запросов от клиента после успешной аутентификации."""
         login = await self._req_auth(reader, writer)
         if not login:
-            await self._close_connect(writer)
+            await self._close_connect(writer=writer)
             return
 
-        self._connects[login] = writer
+        self._connects[login] = (reader, writer)
         await self.send_data(writer, {"action": "log", "log_type": "info", "msg": "Authentication successful."})
 
         try:
@@ -366,24 +361,35 @@ class Server:
         except Exception as e:
             logger.error(f"Error in client handling loop: {e}")
 
-        await self._close_connect(writer, login)
+        await self._close_connect(login=login)
 
-    async def _close_connect(self, writer: StreamWriter, login: Optional[str] = None) -> None:
+    async def _close_connect(self, login: Optional[str] = None, writer: Optional[StreamWriter] = None, reader: Optional[StreamReader] = None) -> None:
         """Закрывает соединение с клиентом и удаляет его из списка активных подключений.
 
         Args:
-            writer (StreamWriter): Объект для отправки данных клиенту.
-            login (Optional[str], optional): Логин пользователя. По умолчанию None.
+            login (Optional[str], optional): Логин пользователя. Defaults to None.
+            writer (Optional[StreamWriter], optional): Объект для отправки данных клиенту. Defaults to None.
+            reader (Optional[StreamReader], optional): Объект для чтения данных от клиента. Defaults to None.
         """
-        if login and login in self._connects:
+        if not login:
+            for client_login, (stored_reader, stored_writer) in self._connects.items():
+                if reader and stored_reader == reader:
+                    login, writer = client_login, stored_writer
+                    break
+                elif writer and stored_writer == writer:
+                    login = client_login
+                    break
+
+        if login in self._connects:
             del self._connects[login]
 
-        try:
-            writer.close()
-            await writer.wait_closed()
-        
-        except Exception as e:
-            logger.error(f"Error closing connection for {login}: {e}")
+        if writer:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            
+            except Exception as e:
+                logger.error(f"Error closing connection for {login}: {e}")
 
     async def send_data_login(self, login: str, data: Any) -> None:
         """Отправляет данные пользователю по его логину.
@@ -455,7 +461,7 @@ class Server:
             reader (StreamReader): Объект для чтения данных от клиента.
 
         Returns:
-            Any: Распакованные данные, полученные от клиента.
+            Any: Распакованные данные или None в случае ошибки.
         """
         try:
             data_size_bytes = await reader.readexactly(4)
@@ -463,8 +469,18 @@ class Server:
             packed_data = await reader.readexactly(data_size)
             return msgpack.unpackb(packed_data)
         
+        except asyncio.IncompleteReadError as e:
+            logger.error(f"Client connection closed while receiving data: {e}")
+            await self._close_connect(reader=reader)
+            return None
+
+        except ConnectionResetError as e:
+            logger.error(f"Client reset the connection: {e}")
+            await self._close_connect(reader=reader)
+            return None
+
         except Exception as e:
-            logger.error(f"Error receiving data: {e}")
+            logger.error(f"Unexpected error receiving data from client: {e}")
             return None
 
     async def start(self) -> None:
