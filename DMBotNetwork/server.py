@@ -318,7 +318,7 @@ class Server:
             Optional[str]: Логин пользователя, если аутентификация успешна, иначе None.
         """
         try:
-            await self.send_data(writer, {"action": "auth"})
+            await self.send_data(writer, {"req": "auth"})
             user_data = await asyncio.wait_for(self.receive_data(reader), timeout=self.TIME_OUT)
 
             if not isinstance(user_data, dict) or 'login' not in user_data or 'password' not in user_data:
