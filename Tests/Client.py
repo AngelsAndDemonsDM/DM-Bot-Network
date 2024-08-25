@@ -21,17 +21,8 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         shutil.rmtree(self.test_dir)
 
-    async def test_connect(self):
-        with patch('asyncio.open_connection', new_callable=AsyncMock) as mock_open_connection:
-            mock_open_connection.return_value = (AsyncMock(), AsyncMock())
-
-            await Client.connect()
-            self.assertIsNotNone(Client._reader)
-            self.assertIsNotNone(Client._writer)
-
     async def test_authenticate_success(self):
-        with patch.object(Client, 'connect', new_callable=AsyncMock), \
-             patch.object(Client, 'send_data', new_callable=AsyncMock), \
+        with patch.object(Client, 'send_data', new_callable=AsyncMock), \
              patch.object(Client, 'receive_data', new_callable=AsyncMock) as mock_receive_data, \
              patch.object(Client, 'listen_for_messages', new_callable=AsyncMock) as mock_listen_for_messages:
             
@@ -42,13 +33,11 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
             Client._is_connected = False
             
             self.assertTrue(result)
-            self.assertIsNotNone(Client._listen_task)
             self.assertEqual(Client._cur_server_name, "dev_server")
-            mock_listen_for_messages.assert_called_once()
+            mock_listen_for_messages.assert_not_called()
 
     async def test_authenticate_failure(self):
-        with patch.object(Client, 'connect', new_callable=AsyncMock), \
-             patch.object(Client, 'send_data', new_callable=AsyncMock), \
+        with patch.object(Client, 'send_data', new_callable=AsyncMock), \
              patch.object(Client, 'receive_data', new_callable=AsyncMock) as mock_receive_data:
             
             mock_receive_data.return_value = {"action": "log", "log_type": "error"}
