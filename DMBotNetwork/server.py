@@ -449,7 +449,7 @@ class Server:
         """
         try:
             packed_data = msgpack.packb(data)
-            await self.send_raw(packed_data)
+            await self.send_raw(writer, packed_data)
         
         except Exception as e:
             logger.error(f"Error sending data: {e}")
