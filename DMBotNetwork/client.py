@@ -81,12 +81,6 @@ class Client:
         try:
             cls._reader, cls._writer = await asyncio.open_connection(cls._host, cls._port)
             cls._is_connected = True
-            logger.info("Connected to server")
-            
-            if not await cls._authenticate():
-                logger.error("Authentication failed.")
-                await cls._close()
-                return
             
             await cls.listen_for_messages()
         
@@ -149,7 +143,7 @@ class Client:
             logger.error(f"Error sending data: {e}")
 
     @classmethod
-    async def receive_data(cls) -> Any:
+    async def _receive_data(cls) -> Any:
         """Получает данные с сервера.
 
         Raises:
@@ -181,34 +175,21 @@ class Client:
 
         except Exception as e:
             logger.error(f"Unexpected error receiving data: {e}")
+            await cls._close()
             return None
 
     @classmethod
-    async def _authenticate(cls) -> bool:
+    async def _authenticate(cls) -> None:
         """Аутентифицирует клиента на сервере.
-
-        Returns:
-            bool: True, если аутентификация успешна, иначе False.
         """
-        auth_data = {
-            "login": cls._login,
-            "password": cls._password
-        }
-
         try:
-            await cls.send_data(auth_data)
-            response = await cls.receive_data()
-
-            if isinstance(response, dict) and response.get("action") == "log" and response.get("log_type") == "info":
-                cls._cur_server_name = response.get('server_name')
-                return True
-            
-            else:
-                return False
+            await cls.send_data({
+                "login": cls._login,
+                "password": cls._password
+            })
         
         except Exception as e:
             logger.error(f"Error during authentication: {e}")
-            return False
 
     @classmethod
     async def request_method(cls, action: str, spec_type: str, **kwargs) -> Any:
@@ -235,7 +216,7 @@ class Client:
 
         try:
             await cls.send_data(request_data)
-            return await cls.receive_data()
+            return await cls._receive_data()
         
         except Exception as e:
             logger.error(f"Error requesting method '{action}.{spec_type}'. kwargs: '{kwargs}'. Error: {e}")
@@ -246,7 +227,7 @@ class Client:
         """Слушает входящие сообщения от сервера и обрабатывает их."""
         while cls._is_connected:
             try:
-                server_data = await cls.receive_data()
+                server_data = await cls._receive_data()
                 if isinstance(server_data, dict):
                     processors = {
                         'action': cls._action_processor,
@@ -305,7 +286,7 @@ class Client:
             received_size = 0
 
             while received_size < file_size:
-                chunk_data = await cls.receive_data()
+                chunk_data = await cls._receive_data()
                 
                 file.write(chunk_data)
                 received_size += len(chunk_data)
