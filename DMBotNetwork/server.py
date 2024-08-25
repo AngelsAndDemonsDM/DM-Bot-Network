@@ -319,7 +319,7 @@ class Server:
         """
         try:
             await self.send_data(writer, {"req": "auth"})
-            user_data = await asyncio.wait_for(self.receive_data(reader), timeout=self.TIME_OUT)
+            user_data = await asyncio.wait_for(self._receive_data(reader), timeout=self.TIME_OUT)
 
             if not isinstance(user_data, dict) or 'login' not in user_data or 'password' not in user_data:
                 await self.send_data(writer, {"action": "log", "log_type": "error", "msg": "Invalid authentication data.", 'server_name': self._server_name})
@@ -344,11 +344,12 @@ class Server:
             return
 
         self._connects[login] = (reader, writer)
+        logger.info(f"User '{login}' is connected")
         await self.send_data(writer, {"action": "log", "log_type": "info", "msg": "Authentication successful."})
 
         try:
             while self._is_online:
-                user_data = await self.receive_data(reader)
+                user_data = await self._receive_data(reader)
                 if isinstance(user_data, dict):
                     action_type = user_data.get('action', None)
                     if action_type == "net":
@@ -390,7 +391,10 @@ class Server:
             
             except Exception as e:
                 logger.error(f"Error closing connection for {login}: {e}")
-
+        
+        if login:
+            logger.info(f"User '{login}' is disconnected")
+        
     async def send_data_login(self, login: str, data: Any) -> None:
         """Отправляет данные пользователю по его логину.
 
@@ -445,16 +449,37 @@ class Server:
         """
         try:
             packed_data = msgpack.packb(data)
-            writer.write(len(packed_data).to_bytes(4, byteorder='big'))
-            await writer.drain()
-
-            writer.write(packed_data)
-            await writer.drain()
+            await self.send_raw(packed_data)
         
         except Exception as e:
             logger.error(f"Error sending data: {e}")
 
-    async def receive_data(self, reader: StreamReader) -> Any:
+    async def broadcast_data(self, data: Any) -> None:
+        """Отправляет данные всем клиентам.
+
+        Args:
+            data (Any): Данные для отправки.
+        """
+        packed_data = msgpack.packb(data)
+        tasks = []
+        
+        for _, (_, writer) in self._connects.items():
+            tasks.append(self.send_raw(writer, packed_data))
+        
+        await asyncio.gather(*tasks, return_exceptions=True)
+    
+    async def send_raw(self, writer: StreamWriter, data: bytes) -> None:
+        try:
+            writer.write(len(data).to_bytes(4, byteorder='big'))
+            await writer.drain()
+
+            writer.write(data)
+            await writer.drain()
+        except Exception as e:
+            logger.error(f"Error sending data: {e}")
+
+    
+    async def _receive_data(self, reader: StreamReader) -> Any:
         """Получает данные от клиента.
 
         Args:
@@ -481,6 +506,7 @@ class Server:
 
         except Exception as e:
             logger.error(f"Unexpected error receiving data from client: {e}")
+            await self._close_connect(reader=reader)
             return None
 
     async def start(self) -> None:
