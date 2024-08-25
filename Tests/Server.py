@@ -84,7 +84,7 @@ class TestServer(unittest.IsolatedAsyncioTestCase):
             mock.call(packed_data)
         ])
 
-        received_data = await self.server.receive_data(reader)
+        received_data = await self.server._receive_data(reader)
         self.assertEqual(received_data, data)
         
 if __name__ == '__main__':
