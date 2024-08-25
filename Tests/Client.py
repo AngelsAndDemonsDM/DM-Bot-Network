@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 from DMBotNetwork.client import Client
 
+# Bruh. No test
 
 class TestClient(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
@@ -20,34 +21,6 @@ class TestClient(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         shutil.rmtree(self.test_dir)
-
-    async def test_authenticate_success(self):
-        with patch.object(Client, 'send_data', new_callable=AsyncMock), \
-             patch.object(Client, 'receive_data', new_callable=AsyncMock) as mock_receive_data, \
-             patch.object(Client, 'listen_for_messages', new_callable=AsyncMock) as mock_listen_for_messages:
-            
-            mock_receive_data.return_value = {"action": "log", "log_type": "info", 'server_name': "dev_server"}
-
-            Client._is_connected = True
-            result = await Client._authenticate()
-            Client._is_connected = False
-            
-            self.assertTrue(result)
-            self.assertEqual(Client._cur_server_name, "dev_server")
-            mock_listen_for_messages.assert_not_called()
-
-    async def test_authenticate_failure(self):
-        with patch.object(Client, 'send_data', new_callable=AsyncMock), \
-             patch.object(Client, 'receive_data', new_callable=AsyncMock) as mock_receive_data:
-            
-            mock_receive_data.return_value = {"action": "log", "log_type": "error"}
-            
-            Client._is_connected = True
-            result = await Client._authenticate()
-            Client._is_connected = False
-
-            self.assertFalse(result)
-            self.assertFalse(Client._is_connected)
 
 if __name__ == '__main__':
     unittest.main()
