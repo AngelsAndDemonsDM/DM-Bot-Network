@@ -15,6 +15,7 @@ class Server:
     _net_methods: Dict[str, Any] = {}
     _download_methods: Dict[str, Any] = {}
     _connects: Dict[str, Tuple[StreamReader, StreamWriter]] = {}
+    _access_cache: Dict[str, Dict[str, bool]] = {}
     BASE_ACCESS: Dict[str, bool] = {}
     TIME_OUT: float = 30.0
 
@@ -202,16 +203,17 @@ class Server:
         Returns:
             Optional[Dict[str, bool]]: Словарь прав доступа пользователя, если он существует, иначе None.
         """
-        try:
-            async with self._connection.execute("SELECT access FROM users WHERE username = ?", (username,)) as cursor:
-                row = await cursor.fetchone()
-                if row:
-                    return msgpack.unpackb(row[0])
-                return None
+        if username in self._access_cache:
+            return self._access_cache[username]
         
-        except Exception as e:
-            logger.error(f"Error getting access for user {username}: {e}")
-            return None
+        async with self._connection.execute("SELECT access FROM users WHERE username = ?", (username,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                access_data = msgpack.unpackb(row[0])
+                self._access_cache[username] = access_data
+                return access_data
+        
+        return None
 
     async def db_delete_user(self, username: str) -> bool:
         """Удаляет пользователя из базы данных.
@@ -256,7 +258,7 @@ class Server:
 
         Args:
             username (str): Логин пользователя.
-            new_access (Optional[Dict[str, bool]], optional): Новый словарь прав доступа. По умолчанию None.
+            new_access (Optional[Dict[str, bool]], optional): Новый словарь прав доступа. По умолчанию базовый словарь.
 
         Returns:
             bool: True, если права успешно изменены, иначе False.
@@ -272,6 +274,7 @@ class Server:
         try:
             await self._connection.execute("UPDATE users SET access = ? WHERE username = ?", (packed_access, username))
             await self._connection.commit()
+            self._access_cache.pop(username, None)
             return True
         
         except Exception as e:
