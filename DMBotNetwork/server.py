@@ -242,6 +242,7 @@ class Server:
         try:
             await self._connection.execute("UPDATE users SET password = ? WHERE username = ?", (hashed_password, username))
             await self._connection.commit()
+            self._access_cache.pop(username, None)
             return True
         
         except Exception as e:
