@@ -25,7 +25,7 @@ class Server:
             host (str): Хост, на котором будет запущен сервер.
             port (int): Порт, на котором будет запущен сервер.
             db_path (Path): Путь к директории для хранения базы данных.
-            owner_password (str, optional): Пароль владельца. По умолчанию 'owner_password'.
+            owner_password (str, optional): Пароль владельца (при инициализации). По умолчанию 'owner_password'.
         """
         self._host = host
         self._port = port
