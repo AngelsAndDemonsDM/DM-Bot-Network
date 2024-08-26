@@ -33,6 +33,61 @@ class Client:
             if callable(getattr(cls, method)) and method.startswith("net_"):
                 cls._net_methods[method[4:]] = getattr(cls, method)
 
+    # Сеттеры и геттеры
+    @classmethod
+    def set_host(cls, host: str) -> None:
+        cls._host = host
+
+    @classmethod
+    def get_host(cls) -> Optional[str]:
+        return cls._host
+
+    @classmethod
+    def set_port(cls, port: int) -> None:
+        cls._port = port
+
+    @classmethod
+    def get_port(cls) -> Optional[int]:
+        return cls._port
+
+    @classmethod
+    def set_login(cls, login: str) -> None:
+        cls._login = login
+
+    @classmethod
+    def get_login(cls) -> Optional[str]:
+        return cls._login
+
+    @classmethod
+    def set_password(cls, password: str) -> None:
+        cls._password = password
+
+    @classmethod
+    def get_password(cls) -> Optional[str]:
+        return cls._password
+
+    @classmethod
+    def set_server_file_path(cls, path: Path) -> None:
+        cls._server_file_path = path
+
+    @classmethod
+    def get_server_file_path(cls) -> Optional[Path]:
+        return cls._server_file_path
+
+    # Основные методы взаимодействия с сервером
+    @classmethod
+    async def connect(cls) -> None:
+        """Устанавливает соединение с сервером."""
+        if not cls._host or not cls._port:
+            logger.error("Host and port must be set before connecting.")
+            return
+
+        try:
+            cls._listen_task = asyncio.create_task(cls._connect_and_listen())
+        
+        except Exception as e:
+            logger.error(f"Error creating connect task: {e}")
+
     @classmethod
     async def request_method(cls, spec_type: str, **kwargs) -> None:
         """Запрашивает выполнение метода на сервере.
@@ -59,47 +114,11 @@ class Client:
             logger.error(f"Error requesting method 'net.{spec_type}'. kwargs: '{kwargs}'. Error: {e}")
 
     @classmethod
-    async def connect(cls) -> None:
-        """Устанавливает соединение с сервером."""
-        if not cls._host or not cls._port:
-            logger.error("Host and port must be set before connecting.")
-            return
+    async def close_connection(cls) -> None:
+        """Закрывает соединение с сервером."""
+        await cls._close()
 
-        try:
-            cls._listen_task = asyncio.create_task(cls._connect_and_listen())
-        
-        except Exception as e:
-            logger.error(f"Error creating connect task: {e}")
-
-    @classmethod
-    async def _call_method(cls, metods_dict: Dict[str, Any], method_name: str, **kwargs) -> Any:
-        """Вызывает зарегистрированный метод по его имени.
-
-        Args:
-            metods_dict (Dict[str, Any]): Словарь, из которого будут вызываться методы.
-            method_name (str): Имя метода для вызова.
-
-        Returns:
-            Any: Результат выполнения метода, если найден, иначе None.
-        """
-        method = metods_dict.get(method_name)
-        if method is None:
-            logger.error(f"Net method {method_name} not found.")
-            return None
-
-        sig = inspect.signature(method)
-        valid_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
-
-        try:
-            if inspect.iscoroutinefunction(method):
-                return await method(cls, **valid_kwargs)
-            else:
-                return method(cls, **valid_kwargs)
-        
-        except Exception as e:
-            logger.error(f"Error calling method {method_name}: {e}")
-            return None
-
+    # Вспомогательные методы работы с соединением
     @classmethod
     async def _connect_and_listen(cls) -> None:
         """Управляет процессом подключения и прослушивания сообщений в фоне."""
@@ -113,35 +132,6 @@ class Client:
             logger.error(f"Error in connection and listening: {e}")
             cls._is_connected = False
             await cls._close()
-
-    @classmethod
-    async def close_connection(cls) -> None:
-        """Закрывает соединение с сервером."""
-        await cls._close()
-
-    @classmethod
-    async def _close(cls) -> None:
-        """Закрывает соединение с сервером."""
-        if not cls._is_connected:
-            logger.warning("Attempted to close connection, but no connection was established.")
-            return
-        
-        cls._is_connected = False
-
-        if cls._writer:
-            try:
-                cls._writer.close()
-                await cls._writer.wait_closed()
-            
-            except Exception as e:
-                logger.error(f"Error closing connection: {e}")
-
-        if cls._listen_task:
-            cls._listen_task.cancel()
-            try:
-                await cls._listen_task
-            except asyncio.CancelledError:
-                pass
 
     @classmethod
     async def _send_data(cls, data: Any) -> None:
@@ -204,18 +194,30 @@ class Client:
             return None
 
     @classmethod
-    async def _authenticate(cls) -> None:
-        """Аутентифицирует клиента на сервере.
-        """
-        try:
-            await cls._send_data({
-                "login": cls._login,
-                "password": cls._password
-            })
+    async def _close(cls) -> None:
+        """Закрывает соединение с сервером."""
+        if not cls._is_connected:
+            logger.warning("Attempted to close connection, but no connection was established.")
+            return
         
-        except Exception as e:
-            logger.error(f"Error during authentication: {e}")
+        cls._is_connected = False
 
+        if cls._writer:
+            try:
+                cls._writer.close()
+                await cls._writer.wait_closed()
+            
+            except Exception as e:
+                logger.error(f"Error closing connection: {e}")
+
+        if cls._listen_task:
+            cls._listen_task.cancel()
+            try:
+                await cls._listen_task
+            except asyncio.CancelledError:
+                pass
+
+    # Обработка сообщений от сервера
     @classmethod
     async def listen_for_messages(cls) -> None:
         """Слушает входящие сообщения от сервера и обрабатывает их."""
@@ -258,6 +260,49 @@ class Client:
             logger.warning(f"Unexpected action type from server: {action_type}")
 
     @classmethod
+    async def _call_method(cls, metods_dict: Dict[str, Any], method_name: str, **kwargs) -> Any:
+        """Вызывает зарегистрированный метод по его имени.
+
+        Args:
+            metods_dict (Dict[str, Any]): Словарь, из которого будут вызываться методы.
+            method_name (str): Имя метода для вызова.
+
+        Returns:
+            Any: Результат выполнения метода, если найден, иначе None.
+        """
+        method = metods_dict.get(method_name)
+        if method is None:
+            logger.error(f"Net method {method_name} not found.")
+            return None
+
+        sig = inspect.signature(method)
+        valid_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
+
+        try:
+            if inspect.iscoroutinefunction(method):
+                return await method(cls, **valid_kwargs)
+            else:
+                return method(cls, **valid_kwargs)
+        
+        except Exception as e:
+            logger.error(f"Error calling method {method_name}: {e}")
+            return None
+
+    @classmethod
+    async def _authenticate(cls) -> None:
+        """Аутентифицирует клиента на сервере.
+        """
+        try:
+            await cls._send_data({
+                "login": cls._login,
+                "password": cls._password
+            })
+        
+        except Exception as e:
+            logger.error(f"Error during authentication: {e}")
+
+    # Логирование
+    @classmethod
     def log_processor(cls, server_data: dict) -> None:
         log_methods = {
             "info": logger.info,
@@ -275,44 +320,3 @@ class Client:
         
         else:
             logger.warning(f"Unknown log_type: {log_type}. Message: {msg}")
-
-    # Сеттеры и геттеры
-    @classmethod
-    def set_host(cls, host: str) -> None:
-        cls._host = host
-
-    @classmethod
-    def get_host(cls) -> Optional[str]:
-        return cls._host
-
-    @classmethod
-    def set_port(cls, port: int) -> None:
-        cls._port = port
-
-    @classmethod
-    def get_port(cls) -> Optional[int]:
-        return cls._port
-
-    @classmethod
-    def set_login(cls, login: str) -> None:
-        cls._login = login
-
-    @classmethod
-    def get_login(cls) -> Optional[str]:
-        return cls._login
-
-    @classmethod
-    def set_password(cls, password: str) -> None:
-        cls._password = password
-
-    @classmethod
-    def get_password(cls) -> Optional[str]:
-        return cls._password
-
-    @classmethod
-    def set_server_file_path(cls, path: Path) -> None:
-        cls._server_file_path = path
-
-    @classmethod
-    def get_server_file_path(cls) -> Optional[Path]:
-        return cls._server_file_path
