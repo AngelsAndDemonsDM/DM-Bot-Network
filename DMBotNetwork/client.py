@@ -34,6 +34,44 @@ class Client:
                 cls._net_methods[method[4:]] = getattr(cls, method)
 
     @classmethod
+    async def request_method(cls, spec_type: str, **kwargs) -> None:
+        """Запрашивает выполнение метода на сервере.
+
+        Args:
+            spec_type (str): Указание метода, который нужно вызвать.
+
+        Raises:
+            ConnectionError: Если соединение с сервером не установлено.
+        """
+        if not cls._writer:
+            raise ConnectionError("Not connected to server")
+
+        request_data = {
+            "action": "net",
+            "type": spec_type,
+            **kwargs
+        }
+
+        try:
+            await cls._send_data(request_data)
+        
+        except Exception as e:
+            logger.error(f"Error requesting method 'net.{spec_type}'. kwargs: '{kwargs}'. Error: {e}")
+
+    @classmethod
+    async def connect(cls) -> None:
+        """Устанавливает соединение с сервером."""
+        if not cls._host or not cls._port:
+            logger.error("Host and port must be set before connecting.")
+            return
+
+        try:
+            cls._listen_task = asyncio.create_task(cls._connect_and_listen())
+        
+        except Exception as e:
+            logger.error(f"Error creating connect task: {e}")
+
+    @classmethod
     async def _call_method(cls, metods_dict: Dict[str, Any], method_name: str, **kwargs) -> Any:
         """Вызывает зарегистрированный метод по его имени.
 
@@ -61,19 +99,6 @@ class Client:
         except Exception as e:
             logger.error(f"Error calling method {method_name}: {e}")
             return None
-
-    @classmethod
-    async def connect(cls) -> None:
-        """Устанавливает соединение с сервером."""
-        if not cls._host or not cls._port:
-            logger.error("Host and port must be set before connecting.")
-            return
-
-        try:
-            cls._listen_task = asyncio.create_task(cls._connect_and_listen())
-        
-        except Exception as e:
-            logger.error(f"Error creating connect task: {e}")
 
     @classmethod
     async def _connect_and_listen(cls) -> None:
@@ -119,7 +144,7 @@ class Client:
                 pass
 
     @classmethod
-    async def send_data(cls, data: Any) -> None:
+    async def _send_data(cls, data: Any) -> None:
         """Отправляет данные на сервер.
 
         Args:
@@ -183,44 +208,13 @@ class Client:
         """Аутентифицирует клиента на сервере.
         """
         try:
-            await cls.send_data({
+            await cls._send_data({
                 "login": cls._login,
                 "password": cls._password
             })
         
         except Exception as e:
             logger.error(f"Error during authentication: {e}")
-
-    @classmethod
-    async def request_method(cls, action: str, spec_type: str, **kwargs) -> Any:
-        """Запрашивает выполнение метода на сервере.
-
-        Args:
-            action (str): Тип действия (net, download).
-            spec_type (str): Указание метода, который нужно вызвать.
-
-        Raises:
-            ConnectionError: Если соединение с сервером не установлено.
-
-        Returns:
-            Any: Результат выполнения сетевого метода или None в случае ошибки.
-        """
-        if not cls._writer:
-            raise ConnectionError("Not connected to server")
-
-        request_data = {
-            "action": action,
-            "type": spec_type,
-            **kwargs
-        }
-
-        try:
-            await cls.send_data(request_data)
-            return await cls._receive_data()
-        
-        except Exception as e:
-            logger.error(f"Error requesting method '{action}.{spec_type}'. kwargs: '{kwargs}'. Error: {e}")
-            return None
 
     @classmethod
     async def listen_for_messages(cls) -> None:
@@ -248,9 +242,6 @@ class Client:
     async def _req_processor(cls, req_type, server_data: dict) -> None:
         if req_type == "auth":
             await cls._authenticate()
-        
-        elif req_type == "download":
-            await cls._download_file(server_data)
 
         else:
             logger.warning(f"Unexpected action type from server: {req_type}")
@@ -265,31 +256,6 @@ class Client:
         
         else:
             logger.warning(f"Unexpected action type from server: {action_type}")
-
-    @classmethod
-    async def _download_file(cls, server_data: dict) -> None:
-        """Обрабатывает загрузку файла, получая его частями и сохраняя на диск."""
-        file_size = server_data.get('file_size', None)
-        if not file_size:
-            return
-        
-        file_name = server_data.get('file_name', None)
-        if not file_name:
-            return
-        
-        dir_path = cls._server_file_path / cls._cur_server_name
-        dir_path.mkdir(parents=True, exist_ok=True)
-        file_path = dir_path / file_name
-
-        
-        with open(file_path, "wb") as file:
-            received_size = 0
-
-            while received_size < file_size:
-                chunk_data = await cls._receive_data()
-                
-                file.write(chunk_data)
-                received_size += len(chunk_data)
 
     @classmethod
     def log_processor(cls, server_data: dict) -> None:

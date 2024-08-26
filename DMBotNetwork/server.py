@@ -13,7 +13,6 @@ logger = logging.getLogger("DMBotNetwork Server")
 
 class Server:
     _net_methods: Dict[str, Any] = {}
-    _download_methods: Dict[str, Any] = {}
     _connects: Dict[str, Tuple[StreamReader, StreamWriter]] = {}
     _access_cache: Dict[str, Dict[str, bool]] = {}
     BASE_ACCESS: Dict[str, bool] = {}
@@ -108,15 +107,11 @@ class Server:
         return await loop.run_in_executor(None, bcrypt.hashpw, password.encode(), bcrypt.gensalt())
 
     def __init_subclass__(cls, **kwargs):
-        """Инициализация подклассов сервера. Автоматически регистрирует все методы, начинающиеся с 'net_' или с 'download_'."""
+        """Инициализация подклассов сервера. Автоматически регистрирует все методы, начинающиеся с 'net_'."""
         super().__init_subclass__(**kwargs)
         for method in dir(cls):
             if callable(getattr(cls, method)) and method.startswith("net_"):
                 Server._net_methods[method[4:]] = getattr(cls, method)
-        
-        for method in dir(cls):
-            if callable(getattr(cls, method)) and method.startswith("download_"):
-                Server._download_methods[method[9:]] = getattr(cls, method)
 
     @classmethod
     async def _call_method(cls, metods_dict: Dict[str, Any], method_name: str, **kwargs) -> Any:
@@ -358,9 +353,6 @@ class Server:
                     if action_type == "net":
                         answer = await Server._call_method(self._net_methods, user_data.get('type'), user_login=login, **user_data)
                         await self.send_data(writer, answer)
-                    
-                    if action_type == "download":
-                        await Server._call_method(self._download_methods, user_data.get('type'), user_login=login, **user_data)
         
         except Exception as e:
             logger.error(f"Error in client handling loop: {e}")
@@ -412,36 +404,6 @@ class Server:
             raise ValueError("Unknown login")
 
         await self.send_data(self._connects[login], data)
-
-    async def send_file_login(self, login: str, path: Path, file_name: str) -> None:
-        if login not in self._connects:
-            raise ValueError("Unknown login")
-
-        await self.send_file(self._connects[login], path, file_name)
-
-    async def send_file(self, writer: StreamWriter, path: Path, file_name: str) -> None:
-        """Отправляет файл пользователю через writer.
-
-        Args:
-            writer (StreamWriter): Поток, через который отправляются данные.
-            path (Path): Путь файла, который надо отправить.
-            file_name (str): Имя файла для передачи.
-
-        Raises:
-            Exception: В случае ошибки отправки данных.
-        """
-        try:
-            file_size = path.stat().st_size
-
-            file_info = {'req': 'download', 'file_size': file_size, 'file_name': file_name}
-            await self.send_data(writer, file_info)
-
-            with open(path, "rb") as file:
-                while chunk := file.read(1024 * 1024):  # Чтение порции в 1 МБ
-                    await self.send_data(writer, chunk)
-
-        except Exception as e:
-            logger.error(f"Error sending data: {e}")
 
     async def send_data(self, writer: StreamWriter, data: Any) -> None:
         """Отправляет данные клиенту.
