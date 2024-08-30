@@ -18,8 +18,9 @@ class Client:
     _server_file_path: Optional[Path] = None
     _reader: Optional[StreamReader] = None
     _writer: Optional[StreamWriter] = None
-    _cur_server_name: Optional[str] = None
+    _server_name: Optional[str] = None
     _is_connected: bool = False
+    _is_auth: bool = False
     _listen_task: Optional[asyncio.Task] = None
 
     def __init_subclass__(cls, **kwargs):
@@ -73,6 +74,17 @@ class Client:
     @classmethod
     def get_server_file_path(cls) -> Optional[Path]:
         return cls._server_file_path
+
+    @classmethod
+    def get_server_name(cls) -> Optional[str]:
+        if cls._is_auth:
+            return cls._server_name
+
+        return None
+
+    @classmethod
+    def is_connect(cls) -> bool:
+        return cls._is_connected and cls._is_auth
 
     # Основные методы взаимодействия с сервером
     @classmethod
@@ -130,7 +142,6 @@ class Client:
         
         except Exception as e:
             logger.error(f"Error in connection and listening: {e}")
-            cls._is_connected = False
             await cls._close()
 
     @classmethod
@@ -201,6 +212,7 @@ class Client:
             return
         
         cls._is_connected = False
+        cls._is_auth = False
 
         if cls._writer:
             try:
@@ -243,8 +255,11 @@ class Client:
     @classmethod
     async def _req_processor(cls, req_type, server_data: dict) -> None:
         if req_type == "auth":
-            await cls._authenticate()
+            await cls._req_authenticate()
 
+        elif req_type == 'connect':
+            await cls._req_connect(server_data)
+        
         else:
             logger.warning(f"Unexpected action type from server: {req_type}")
 
@@ -289,7 +304,7 @@ class Client:
             return None
 
     @classmethod
-    async def _authenticate(cls) -> None:
+    async def _req_authenticate(cls) -> None:
         """Аутентифицирует клиента на сервере.
         """
         try:
@@ -300,6 +315,17 @@ class Client:
         
         except Exception as e:
             logger.error(f"Error during authentication: {e}")
+
+    @classmethod
+    async def _req_connect(cls, server_data: dict) -> None:
+        status = server_data.get('status', 1)
+        if status == 1:
+            logger.error("Auth fail")
+            cls._close()
+        
+        elif status == 0:
+            cls._is_auth = True
+            cls._server_name = server_data.get('server_name', "not_set_server_name")
 
     # Логирование
     @classmethod
