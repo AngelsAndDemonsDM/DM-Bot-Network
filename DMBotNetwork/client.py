@@ -9,6 +9,7 @@ import msgpack
 
 logger = logging.getLogger("DMBotNetwork Client")
 
+
 class Client:
     _net_methods: Dict[str, Any] = {}
     _host: Optional[str] = None
@@ -34,40 +35,52 @@ class Client:
 
     # Сеттеры и геттеры
     @classmethod
-    def set_host(cls, host: str) -> None: cls._host = host
+    def set_host(cls, host: str) -> None:
+        cls._host = host
 
     @classmethod
-    def get_host(cls) -> Optional[str]: return cls._host
+    def get_host(cls) -> Optional[str]:
+        return cls._host
 
     @classmethod
-    def set_port(cls, port: int) -> None: cls._port = port
+    def set_port(cls, port: int) -> None:
+        cls._port = port
 
     @classmethod
-    def get_port(cls) -> Optional[int]: return cls._port
+    def get_port(cls) -> Optional[int]:
+        return cls._port
 
     @classmethod
-    def set_login(cls, login: str) -> None: cls._login = login
+    def set_login(cls, login: str) -> None:
+        cls._login = login
 
     @classmethod
-    def get_login(cls) -> Optional[str]: return cls._login
+    def get_login(cls) -> Optional[str]:
+        return cls._login
 
     @classmethod
-    def set_password(cls, password: str) -> None: cls._password = password
+    def set_password(cls, password: str) -> None:
+        cls._password = password
 
     @classmethod
-    def get_password(cls) -> Optional[str]: return cls._password
+    def get_password(cls) -> Optional[str]:
+        return cls._password
 
     @classmethod
-    def set_server_file_path(cls, path: Path) -> None: cls._server_file_path = path
+    def set_server_file_path(cls, path: Path) -> None:
+        cls._server_file_path = path
 
     @classmethod
-    def get_server_file_path(cls) -> Optional[Path]: return cls._server_file_path
+    def get_server_file_path(cls) -> Optional[Path]:
+        return cls._server_file_path
 
     @classmethod
-    def get_server_name(cls) -> Optional[str]: return cls._server_name if cls._is_auth else None
+    def get_server_name(cls) -> Optional[str]:
+        return cls._server_name if cls._is_auth else None
 
     @classmethod
-    def is_connected(cls) -> bool: return cls._is_connected and cls._is_auth
+    def is_connected(cls) -> bool:
+        return cls._is_connected and cls._is_auth
 
     # Основные методы взаимодействия с сервером
     @classmethod
@@ -104,7 +117,9 @@ class Client:
     async def _connect_and_listen(cls) -> None:
         """Управляет процессом подключения и прослушивания сообщений в фоне."""
         try:
-            cls._reader, cls._writer = await asyncio.open_connection(cls._host, cls._port)
+            cls._reader, cls._writer = await asyncio.open_connection(
+                cls._host, cls._port
+            )
             cls._is_connected = True
             await cls.listen_for_messages()
         except Exception as e:
@@ -119,7 +134,7 @@ class Client:
 
         try:
             packed_data = msgpack.packb(data)
-            cls._writer.write(len(packed_data).to_bytes(4, byteorder='big'))
+            cls._writer.write(len(packed_data).to_bytes(4, byteorder="big"))
             await cls._writer.drain()
 
             cls._writer.write(packed_data)
@@ -135,7 +150,7 @@ class Client:
 
         try:
             data_size_bytes = await cls._reader.readexactly(4)
-            data_size = int.from_bytes(data_size_bytes, 'big')
+            data_size = int.from_bytes(data_size_bytes, "big")
             packed_data = await cls._reader.readexactly(data_size)
             return msgpack.unpackb(packed_data)
         except asyncio.IncompleteReadError as e:
@@ -155,9 +170,11 @@ class Client:
     async def _close(cls) -> None:
         """Закрывает соединение с сервером."""
         if not cls._is_connected:
-            logger.warning("Attempted to close connection, but no connection was established.")
+            logger.warning(
+                "Attempted to close connection, but no connection was established."
+            )
             return
-        
+
         cls._is_connected = False
         cls._is_auth = False
 
@@ -184,8 +201,8 @@ class Client:
                 server_data = await cls._receive_data()
                 if isinstance(server_data, dict):
                     processors = {
-                        'action': cls._action_processor,
-                        'req': cls._req_processor
+                        "action": cls._action_processor,
+                        "req": cls._req_processor,
                     }
                     for key, processor in processors.items():
                         data_type = server_data.get(key)
@@ -200,22 +217,26 @@ class Client:
     async def _req_processor(cls, req_type, server_data: dict) -> None:
         if req_type == "auth":
             await cls._req_authenticate()
-        elif req_type == 'connect':
+        elif req_type == "connect":
             await cls._req_connect(server_data)
         else:
             logger.warning(f"Unexpected request type from server: {req_type}")
 
     @classmethod
     async def _action_processor(cls, action_type, server_data: dict) -> None:
-        if action_type == 'log':
+        if action_type == "log":
             cls.log_processor(server_data)
-        elif action_type == 'net':
-            await cls._call_method(cls._net_methods, server_data.get('type'), **server_data)
+        elif action_type == "net":
+            await cls._call_method(
+                cls._net_methods, server_data.get("type"), **server_data
+            )
         else:
             logger.warning(f"Unexpected action type from server: {action_type}")
 
     @classmethod
-    async def _call_method(cls, methods_dict: Dict[str, Any], method_name: str, **kwargs) -> Any:
+    async def _call_method(
+        cls, methods_dict: Dict[str, Any], method_name: str, **kwargs
+    ) -> Any:
         """Вызывает зарегистрированный метод по его имени."""
         method = methods_dict.get(method_name)
         if method is None:
@@ -244,13 +265,13 @@ class Client:
 
     @classmethod
     async def _req_connect(cls, server_data: dict) -> None:
-        status = server_data.get('status', 1)
+        status = server_data.get("status", 1)
         if status == 1:
             logger.error("Auth fail")
             await cls._close()
         elif status == 0:
             cls._is_auth = True
-            cls._server_name = server_data.get('server_name', "not_set_server_name")
+            cls._server_name = server_data.get("server_name", "not_set_server_name")
 
     # Логирование
     @classmethod
@@ -262,9 +283,9 @@ class Client:
             "debug": logger.debug,
             "critical": logger.critical,
         }
-        log_type = server_data.get('log_type', 'not_set')
+        log_type = server_data.get("log_type", "not_set")
         log_method = log_methods.get(log_type)
-        msg = server_data.get('msg', "empty")
+        msg = server_data.get("msg", "empty")
 
         if log_method:
             log_method(msg)
