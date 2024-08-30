@@ -24,15 +24,13 @@ class Client:
     _listen_task: Optional[asyncio.Task] = None
 
     def __init_subclass__(cls, **kwargs):
-        """Автоматически регистрирует методы, начинающиеся с 'net_', как сетевые методы.
-
-        Args:
-            **kwargs: Дополнительные аргументы.
-        """
+        """Автоматически регистрирует методы, начинающиеся с 'net_', как сетевые методы."""
         super().__init_subclass__(**kwargs)
-        for method in dir(cls):
-            if callable(getattr(cls, method)) and method.startswith("net_"):
-                cls._net_methods[method[4:]] = getattr(cls, method)
+        cls._net_methods = {
+            method[4:]: getattr(cls, method)
+            for method in dir(cls)
+            if callable(getattr(cls, method)) and method.startswith("net_")
+        }
 
     # Сеттеры и геттеры
     @classmethod
@@ -77,13 +75,10 @@ class Client:
 
     @classmethod
     def get_server_name(cls) -> Optional[str]:
-        if cls._is_auth:
-            return cls._server_name
-
-        return None
+        return cls._server_name if cls._is_auth else None
 
     @classmethod
-    def is_connect(cls) -> bool:
+    def is_connected(cls) -> bool:
         return cls._is_connected and cls._is_auth
 
     # Основные методы взаимодействия с сервером
@@ -96,34 +91,20 @@ class Client:
 
         try:
             cls._listen_task = asyncio.create_task(cls._connect_and_listen())
-        
         except Exception as e:
             logger.error(f"Error creating connect task: {e}")
 
     @classmethod
     async def request_method(cls, spec_type: str, **kwargs) -> None:
-        """Запрашивает выполнение метода на сервере.
-
-        Args:
-            spec_type (str): Указание метода, который нужно вызвать.
-
-        Raises:
-            ConnectionError: Если соединение с сервером не установлено.
-        """
+        """Запрашивает выполнение метода на сервере."""
         if not cls._writer:
             raise ConnectionError("Not connected to server")
 
-        request_data = {
-            "action": "net",
-            "type": spec_type,
-            **kwargs
-        }
-
+        request_data = {"action": "net", "type": spec_type, **kwargs}
         try:
             await cls._send_data(request_data)
-        
         except Exception as e:
-            logger.error(f"Error requesting method 'net.{spec_type}'. kwargs: '{kwargs}'. Error: {e}")
+            logger.error(f"Error requesting method 'net.{spec_type}': {e}")
 
     @classmethod
     async def close_connection(cls) -> None:
@@ -137,23 +118,14 @@ class Client:
         try:
             cls._reader, cls._writer = await asyncio.open_connection(cls._host, cls._port)
             cls._is_connected = True
-            
             await cls.listen_for_messages()
-        
         except Exception as e:
             logger.error(f"Error in connection and listening: {e}")
             await cls._close()
 
     @classmethod
     async def _send_data(cls, data: Any) -> None:
-        """Отправляет данные на сервер.
-
-        Args:
-            data (Any): Данные для отправки.
-
-        Raises:
-            ConnectionError: Если соединение с сервером не установлено.
-        """
+        """Отправляет данные на сервер."""
         if not cls._writer:
             raise ConnectionError("Not connected to server")
 
@@ -164,41 +136,28 @@ class Client:
 
             cls._writer.write(packed_data)
             await cls._writer.drain()
-        
         except Exception as e:
             logger.error(f"Error sending data: {e}")
 
     @classmethod
     async def _receive_data(cls) -> Any:
-        """Получает данные с сервера.
-
-        Raises:
-            ConnectionError: Если соединение с сервером не установлено.
-
-        Returns:
-            Any: Распакованные данные или None в случае ошибки.
-        """
+        """Получает данные с сервера."""
         if not cls._reader:
             raise ConnectionError("Not connected to server")
 
         try:
             data_size_bytes = await cls._reader.readexactly(4)
             data_size = int.from_bytes(data_size_bytes, 'big')
-
             packed_data = await cls._reader.readexactly(data_size)
-
             return msgpack.unpackb(packed_data)
-        
         except asyncio.IncompleteReadError as e:
             logger.error(f"Connection closed while receiving data: {e}")
             await cls._close()
             return None
-
         except ConnectionResetError as e:
             logger.error(f"Connection reset by server: {e}")
             await cls._close()
             return None
-
         except Exception as e:
             logger.error(f"Unexpected error receiving data: {e}")
             await cls._close()
@@ -218,7 +177,6 @@ class Client:
             try:
                 cls._writer.close()
                 await cls._writer.wait_closed()
-            
             except Exception as e:
                 logger.error(f"Error closing connection: {e}")
 
@@ -241,13 +199,11 @@ class Client:
                         'action': cls._action_processor,
                         'req': cls._req_processor
                     }
-                    
                     for key, processor in processors.items():
-                        data_type = server_data.get(key, None)
+                        data_type = server_data.get(key)
                         if data_type:
                             await processor(data_type, server_data)
                             break
-            
             except Exception as e:
                 logger.error(f"Error in listen_for_messages: {e}")
                 await cls._close()
@@ -256,36 +212,24 @@ class Client:
     async def _req_processor(cls, req_type, server_data: dict) -> None:
         if req_type == "auth":
             await cls._req_authenticate()
-
         elif req_type == 'connect':
             await cls._req_connect(server_data)
-        
         else:
-            logger.warning(f"Unexpected action type from server: {req_type}")
+            logger.warning(f"Unexpected request type from server: {req_type}")
 
     @classmethod
     async def _action_processor(cls, action_type, server_data: dict) -> None:
         if action_type == 'log':
             cls.log_processor(server_data)
-        
         elif action_type == 'net':
             await cls._call_method(cls._net_methods, server_data.get('type'), **server_data)
-        
         else:
             logger.warning(f"Unexpected action type from server: {action_type}")
 
     @classmethod
-    async def _call_method(cls, metods_dict: Dict[str, Any], method_name: str, **kwargs) -> Any:
-        """Вызывает зарегистрированный метод по его имени.
-
-        Args:
-            metods_dict (Dict[str, Any]): Словарь, из которого будут вызываться методы.
-            method_name (str): Имя метода для вызова.
-
-        Returns:
-            Any: Результат выполнения метода, если найден, иначе None.
-        """
-        method = metods_dict.get(method_name)
+    async def _call_method(cls, methods_dict: Dict[str, Any], method_name: str, **kwargs) -> Any:
+        """Вызывает зарегистрированный метод по его имени."""
+        method = methods_dict.get(method_name)
         if method is None:
             logger.error(f"Net method {method_name} not found.")
             return None
@@ -298,21 +242,15 @@ class Client:
                 return await method(cls, **valid_kwargs)
             else:
                 return method(cls, **valid_kwargs)
-        
         except Exception as e:
             logger.error(f"Error calling method {method_name}: {e}")
             return None
 
     @classmethod
     async def _req_authenticate(cls) -> None:
-        """Аутентифицирует клиента на сервере.
-        """
+        """Аутентифицирует клиента на сервере."""
         try:
-            await cls._send_data({
-                "login": cls._login,
-                "password": cls._password
-            })
-        
+            await cls._send_data({"login": cls._login, "password": cls._password})
         except Exception as e:
             logger.error(f"Error during authentication: {e}")
 
@@ -321,8 +259,7 @@ class Client:
         status = server_data.get('status', 1)
         if status == 1:
             logger.error("Auth fail")
-            cls._close()
-        
+            await cls._close()
         elif status == 0:
             cls._is_auth = True
             cls._server_name = server_data.get('server_name', "not_set_server_name")
@@ -340,9 +277,8 @@ class Client:
         log_type = server_data.get('log_type', 'not_set')
         log_method = log_methods.get(log_type)
         msg = server_data.get('msg', "empty")
-        
+
         if log_method:
             log_method(msg)
-        
         else:
             logger.warning(f"Unknown log_type: {log_type}. Message: {msg}")
