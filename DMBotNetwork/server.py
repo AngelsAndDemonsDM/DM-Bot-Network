@@ -39,12 +39,16 @@ class Server:
     # Сеттеры
     @classmethod
     def set_host(cls, host: str) -> None: cls._host = host
+    
     @classmethod
     def set_port(cls, port: int) -> None: cls._port = port
+    
     @classmethod
     def set_server_name(cls, server_name: str) -> None: cls._server_name = server_name
+    
     @classmethod
     def set_db_path(cls, db_path: Path) -> None: cls._db_path = db_path
+    
     @classmethod
     def set_owner_password(cls, owner_password: str) -> None: cls._owner_password = owner_password
 

@@ -34,52 +34,40 @@ class Client:
 
     # Сеттеры и геттеры
     @classmethod
-    def set_host(cls, host: str) -> None:
-        cls._host = host
+    def set_host(cls, host: str) -> None: cls._host = host
 
     @classmethod
-    def get_host(cls) -> Optional[str]:
-        return cls._host
+    def get_host(cls) -> Optional[str]: return cls._host
 
     @classmethod
-    def set_port(cls, port: int) -> None:
-        cls._port = port
+    def set_port(cls, port: int) -> None: cls._port = port
 
     @classmethod
-    def get_port(cls) -> Optional[int]:
-        return cls._port
+    def get_port(cls) -> Optional[int]: return cls._port
 
     @classmethod
-    def set_login(cls, login: str) -> None:
-        cls._login = login
+    def set_login(cls, login: str) -> None: cls._login = login
 
     @classmethod
-    def get_login(cls) -> Optional[str]:
-        return cls._login
+    def get_login(cls) -> Optional[str]: return cls._login
 
     @classmethod
-    def set_password(cls, password: str) -> None:
-        cls._password = password
+    def set_password(cls, password: str) -> None: cls._password = password
 
     @classmethod
-    def get_password(cls) -> Optional[str]:
-        return cls._password
+    def get_password(cls) -> Optional[str]: return cls._password
 
     @classmethod
-    def set_server_file_path(cls, path: Path) -> None:
-        cls._server_file_path = path
+    def set_server_file_path(cls, path: Path) -> None: cls._server_file_path = path
 
     @classmethod
-    def get_server_file_path(cls) -> Optional[Path]:
-        return cls._server_file_path
+    def get_server_file_path(cls) -> Optional[Path]: return cls._server_file_path
 
     @classmethod
-    def get_server_name(cls) -> Optional[str]:
-        return cls._server_name if cls._is_auth else None
+    def get_server_name(cls) -> Optional[str]: return cls._server_name if cls._is_auth else None
 
     @classmethod
-    def is_connected(cls) -> bool:
-        return cls._is_connected and cls._is_auth
+    def is_connected(cls) -> bool: return cls._is_connected and cls._is_auth
 
     # Основные методы взаимодействия с сервером
     @classmethod
