@@ -23,7 +23,6 @@ class ServerDB:
     # -----------------
     # Сеттеры и геттеры
     # -----------------
-
     @classmethod
     def get_base_access(cls) -> Dict[str, bool]:
         return cls._base_access
@@ -51,7 +50,6 @@ class ServerDB:
     # -----------------
     # Вспомогательное
     # -----------------
-
     @classmethod
     def exist(cls, login: str) -> bool:
         return login in cls._exist_user
@@ -59,9 +57,8 @@ class ServerDB:
     # -----------------
     # Инициализация БД
     # -----------------
-
     @classmethod
-    async def init_db(cls) -> None:
+    async def start(cls) -> None:
         await cls._init_db()
         await cls._init_exist_user()
         await cls._init_owner()
@@ -121,8 +118,7 @@ class ServerDB:
             raise
 
     @classmethod
-    async def close_connection(cls) -> None:
-        """Закрывает соединение с базой данных."""
+    async def stop(cls) -> None:
         if cls._connection:
             await cls._connection.close()
             cls._connection = None
@@ -130,7 +126,6 @@ class ServerDB:
     # ---------------------
     # Работа с паролями
     # ---------------------
-
     @classmethod
     async def _check_password(cls, password: str, db_password: bytes) -> bool:
         loop = asyncio.get_running_loop()
@@ -148,9 +143,8 @@ class ServerDB:
     # ---------------------
     # Управление пользователями
     # ---------------------
-
     @classmethod
-    async def db_login_user(cls, login: str, password: str) -> Optional[str]:
+    async def login_user(cls, login: str, password: str) -> Optional[str]:
         try:
             async with cls._connection.execute(
                 "SELECT password FROM users WHERE username = ?", (login,)
@@ -166,10 +160,17 @@ class ServerDB:
             return None
 
     @classmethod
-    async def db_add_user(
-        cls, username: str, password: str, access: Dict[str, bool]
+    async def add_user(
+        cls, username: str, password: str, access: Optional[Dict[str, bool]] = None
     ) -> bool:
+        if username in cls._exist_user:
+            return False
+
         hashed_password = await cls._hash_password(password)
+
+        if not access:
+            access = cls._base_access.copy()
+
         packed_access = msgpack.packb(access)
 
         try:
@@ -186,7 +187,7 @@ class ServerDB:
             return False
 
     @classmethod
-    async def db_delete_user(cls, username: str) -> bool:
+    async def delete_user(cls, username: str) -> bool:
         try:
             await cls._connection.execute(
                 "DELETE FROM users WHERE username = ?", (username,)
@@ -201,7 +202,7 @@ class ServerDB:
             return False
 
     @classmethod
-    async def db_change_password(cls, username: str, new_password: str) -> bool:
+    async def change_user_password(cls, username: str, new_password: str) -> bool:
         hashed_password = await cls._hash_password(new_password)
 
         try:
@@ -217,7 +218,7 @@ class ServerDB:
             return False
 
     @classmethod
-    async def db_change_access(
+    async def change_user_access(
         cls, username: str, new_access: Optional[Dict[str, bool]] = None
     ) -> bool:
         if username == "owner":
@@ -242,7 +243,7 @@ class ServerDB:
             return False
 
     @classmethod
-    async def db_get_access(cls, username: str) -> Optional[Dict[str, bool]]:
+    async def get_access(cls, username: str) -> Optional[Dict[str, bool]]:
         if username in cls._access_cache:
             return cls._access_cache[username]
 
@@ -260,10 +261,9 @@ class ServerDB:
     # ---------------------
     # Работа с доступами
     # ---------------------
-
     @classmethod
     async def check_access_login(cls, username: str, need_access: list[str]) -> bool:
-        access_dict = await cls.db_get_access(username)
+        access_dict = await cls.get_access(username)
         return cls.check_access(access_dict, need_access) if access_dict else False
 
     @staticmethod
