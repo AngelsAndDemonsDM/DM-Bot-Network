@@ -356,18 +356,18 @@ class Server:
             user_data = await asyncio.wait_for(cls._receive_data(reader), timeout=cls.TIME_OUT)
 
             if not isinstance(user_data, dict) or 'login' not in user_data or 'password' not in user_data:
-                await cls.send_data(writer, {"action": "log", "log_type": "error", "msg": "Invalid authentication data.", 'server_name': cls._server_name})
+                await cls.send_log(writer, "Invalid authentication data.", 'error')
                 return None
 
             return await cls.db_login_user(user_data['login'], user_data['password'])
 
         except asyncio.TimeoutError:
-            await cls.send_data(writer, {"action": "log", "log_type": "error", "msg": "Timeout error."})
+            await cls.send_log(writer, "Timeout error.", 'error')
             return None
 
         except Exception as err:
             logger.error(f"Authentication error: {err}")
-            await cls.send_data(writer, {"action": "log", "log_type": "error", "msg": "Internal server error."})
+            await cls.send_log(writer, "Internal server error.", 'error')
             return None
 
     @classmethod
@@ -429,6 +429,14 @@ class Server:
         
         if login:
             logger.info(f"User '{login}' is disconnected")
+
+    @classmethod
+    async def send_log_login(cls, login: str, msg: str, log_type: str = 'info') -> None:
+        await Server.send_data_login(login, {"action": "log", "log_type": log_type, "msg": msg})
+
+    @classmethod
+    async def send_log(cls, writer: StreamWriter, msg: str, log_type: str = 'info') -> None:
+        await Server.send_data(writer, {"action": "log", "log_type": log_type, "msg": msg})
         
     @classmethod
     async def send_data_login(cls, login: str, data: Any) -> None:
