@@ -375,12 +375,13 @@ class Server:
         """Основной цикл обработки запросов от клиента после успешной аутентификации."""
         login = await cls._req_auth(reader, writer)
         if not login:
+            cls.send_data(writer, {'req': 'connect', 'status': 1})
             await cls._close_connect(writer=writer)
             return
 
         cls._connects[login] = writer
         logger.info(f"User '{login}' is connected")
-        await cls.send_data(writer, {"action": "log", "log_type": "info", "msg": "Authentication successful."})
+        await cls.send_data(writer, {"req": "connect", "status": 0, "server_name": cls._server_name})
 
         try:
             while cls._is_online:
