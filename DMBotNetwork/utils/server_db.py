@@ -20,9 +20,7 @@ class ServerDB:
     _db_path: Optional[Path] = None
     _owner_base_password: str = "owner_password"
 
-    # -----------------
     # Сеттеры и геттеры
-    # -----------------
     @classmethod
     def get_base_access(cls) -> Dict[str, bool]:
         return cls._base_access
@@ -47,16 +45,12 @@ class ServerDB:
     def set_owner_base_password(cls, value: str) -> None:
         cls._owner_base_password = value
 
-    # -----------------
     # Вспомогательное
-    # -----------------
     @classmethod
     def exist(cls, login: str) -> bool:
         return login in cls._exist_user
 
-    # -----------------
     # Инициализация БД
-    # -----------------
     @classmethod
     async def start(cls) -> None:
         await cls._init_db()
@@ -123,9 +117,7 @@ class ServerDB:
             await cls._connection.close()
             cls._connection = None
 
-    # ---------------------
     # Работа с паролями
-    # ---------------------
     @classmethod
     async def _check_password(cls, password: str, db_password: bytes) -> bool:
         loop = asyncio.get_running_loop()
@@ -140,20 +132,24 @@ class ServerDB:
             None, bcrypt.hashpw, password.encode(), bcrypt.gensalt()
         )
 
-    # ---------------------
     # Управление пользователями
-    # ---------------------
     @classmethod
     async def login_user(cls, login: str, password: str) -> Optional[str]:
+        if login not in cls._exist_user:
+            raise ValueError(f"User '{login}' not found.")
+
         try:
             async with cls._connection.execute(
                 "SELECT password FROM users WHERE username = ?", (login,)
             ) as cursor:
                 row = await cursor.fetchone()
-                if row and await cls._check_password(password, row[0]):
-                    return login
+                if row is None:
+                    raise ValueError(f"User '{login}' not found in database.")
 
-                return None
+                if not await cls._check_password(password, row[0]):
+                    raise ValueError("Incorrect password.")
+
+                return login
 
         except Exception as e:
             logger.error(f"Error logging in user {login}: {e}")
@@ -162,13 +158,13 @@ class ServerDB:
     @classmethod
     async def add_user(
         cls, username: str, password: str, access: Optional[Dict[str, bool]] = None
-    ) -> bool:
+    ) -> None:
         if username in cls._exist_user:
-            return False
+            raise ValueError(f"User '{username}' already exists.")
 
         hashed_password = await cls._hash_password(password)
 
-        if not access:
+        if access is None:
             access = cls._base_access.copy()
 
         packed_access = msgpack.packb(access)
@@ -180,29 +176,33 @@ class ServerDB:
             )
             await cls._connection.commit()
             cls._exist_user.add(username)
-            return True
+            logger.info(f"User '{username}' successfully added.")
 
-        except Exception as e:
-            logger.error(f"Error adding user {username}: {e}")
-            return False
+        except Exception as err:
+            logger.error(f"Error adding user {username}: {err}")
+            raise err
 
     @classmethod
-    async def delete_user(cls, username: str) -> bool:
+    async def delete_user(cls, username: str) -> None:
+        if username not in cls._exist_user:
+            return
+
         try:
             await cls._connection.execute(
                 "DELETE FROM users WHERE username = ?", (username,)
             )
             await cls._connection.commit()
-            cls._access_cache.pop(username, None)
+            del cls._access_cache[username]
             cls._exist_user.discard(username)
-            return True
 
         except Exception as e:
             logger.error(f"Error deleting user {username}: {e}")
-            return False
 
     @classmethod
-    async def change_user_password(cls, username: str, new_password: str) -> bool:
+    async def change_user_password(cls, username: str, new_password: str) -> None:
+        if username not in cls._exist_user:
+            return
+
         hashed_password = await cls._hash_password(new_password)
 
         try:
@@ -211,16 +211,17 @@ class ServerDB:
                 (hashed_password, username),
             )
             await cls._connection.commit()
-            return True
 
         except Exception as e:
             logger.error(f"Error changing password for user {username}: {e}")
-            return False
 
     @classmethod
     async def change_user_access(
         cls, username: str, new_access: Optional[Dict[str, bool]] = None
     ) -> bool:
+        if username not in cls._exist_user:
+            return
+
         if username == "owner":
             new_access = {"full_access": True}
 
@@ -244,6 +245,9 @@ class ServerDB:
 
     @classmethod
     async def get_access(cls, username: str) -> Optional[Dict[str, bool]]:
+        if username not in cls._exist_user:
+            return None
+
         if username in cls._access_cache:
             return cls._access_cache[username]
 
@@ -258,9 +262,7 @@ class ServerDB:
 
         return None
 
-    # ---------------------
     # Работа с доступами
-    # ---------------------
     @classmethod
     async def check_access_login(cls, username: str, need_access: list[str]) -> bool:
         access_dict = await cls.get_access(username)
