@@ -3,7 +3,8 @@ from pathlib import Path
 from typing import Any
 
 import msgpack
-from utils import NCAnyType, NetCode
+
+from ..utils import NCAnyType, NetCode
 
 
 class ClientUnit:
@@ -45,7 +46,7 @@ class ClientUnit:
     # Net
     async def req_net(self, type: str, **kwargs: Any) -> None:
         await self.send_packet(NetCode.REQ_NET, type=type, **kwargs)
-    
+
     # Logs
     async def log_debug(self, message: str) -> None:
         await self.send_packet(NetCode.REQ_LOG_DEBUG, message=message)
@@ -76,7 +77,9 @@ class ClientUnit:
         await self._writer.drain()
 
     # File send
-    async def send_file(self, file_path: Path, chunk_size: int = 4096) -> None:
+    async def send_file(
+        self, file_path: Path, file_name: str, chunk_size: int = 4096
+    ) -> None:
         if self._writer is None:
             raise ValueError("StreamWriter is not set")
 
@@ -85,10 +88,11 @@ class ClientUnit:
                 while True:
                     chunk = file.read(chunk_size)
                     if not chunk:
-                        await self.send_packet(NetCode.END_FILE_DOWNLOAD)
                         break
 
-                    await self.send_packet(NetCode.REQ_FILE_DOWNLOAD, chunk)
+                    await self.send_packet(
+                        NetCode.REQ_FILE_DOWNLOAD, file_name=file_name, chunk=chunk
+                    )
 
         except Exception as e:
             await self.log_error(f"Error sending file: {e}")

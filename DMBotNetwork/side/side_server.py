@@ -5,8 +5,8 @@ from asyncio import StreamReader, StreamWriter
 from pathlib import Path
 from typing import Any, Dict, Optional, Set, get_type_hints
 
-from units import ClientUnit
-from utils import NetCode, ServerDB
+from ..units import ClientUnit
+from ..utils import NetCode, ServerDB
 
 logger = logging.getLogger("DMBotNetwork.Server")
 
@@ -19,7 +19,7 @@ class Server:
 
     _allow_registration: bool = True
     _timeout: float = 30.0
-    _content_file: Path = None
+    _server_name: str = None
 
     _is_online: bool = False
     _main_server: Optional[asyncio.AbstractServer] = None
@@ -80,7 +80,7 @@ class Server:
         timeout: float = 30.0,
         allow_registration: bool = True,
         base_access_flags: Dict[str, bool] = {},
-        content_file: Path | str = None,
+        server_name: str = "dev_bot",
     ) -> None:
         if cls._is_online:
             logger.warning("Server is already working")
@@ -94,13 +94,6 @@ class Server:
 
         cls._allow_registration = allow_registration
         cls._timeout = timeout
-
-        content_file = Path(content_file)
-        if not content_file.is_file():
-            logger.warning(f"Server content is invalid: {content_file}")
-            return
-
-        cls._content_file = content_file
 
         cls._main_server = await asyncio.start_server(
             cls._main_client_handler, host, main_port
@@ -216,7 +209,7 @@ class Server:
     # Auth
     @classmethod
     async def _auth(cls, cl_unit: ClientUnit) -> None:
-        await cl_unit.send_packet(NetCode.REQ_AUTH)
+        await cl_unit.send_packet(NetCode.REQ_AUTH, server_name=cls._server_name)
         receive_packet = await asyncio.wait_for(cl_unit._receive_packet(), cls._timeout)
 
         if not isinstance(receive_packet, dict):

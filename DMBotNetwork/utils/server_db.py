@@ -192,11 +192,13 @@ class ServerDB:
                 "DELETE FROM users WHERE username = ?", (username,)
             )
             await cls._connection.commit()
-            del cls._access_cache[username]
+            
+            cls._access_cache.pop(username, None)
             cls._exist_user.discard(username)
 
         except Exception as e:
             logger.error(f"Error deleting user {username}: {e}")
+
 
     @classmethod
     async def change_user_password(cls, username: str, new_password: str) -> None:

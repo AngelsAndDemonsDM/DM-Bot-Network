@@ -2,10 +2,12 @@ import asyncio
 import inspect
 import logging
 from asyncio import StreamReader, StreamWriter
+from pathlib import Path
 from typing import Any, Dict, Optional, get_type_hints
 
 import msgpack
-from utils import NetCode
+
+from ..utils import NCAnyType, NCLogType, NetCode
 
 logger = logging.getLogger("DMBotNetwork Client")
 
@@ -14,9 +16,11 @@ class Client:
     _network_methods: Dict[str, Any] = {}
     _ear_task: Optional[asyncio.Task] = None  # lol
 
+    _viva_alp: bool = True
     _login: str = None
     _password: str = None
-    _is_downloaded: bool = True
+    _content_path: Optional[Path] = None
+    _server_name: Optional[str] = None
 
     _is_connected: bool = False
     _is_auth: bool = False
@@ -78,6 +82,14 @@ class Client:
         return cls._is_auth and cls._is_connected
 
     @classmethod
+    def get_auth_lp(cls) -> bool:
+        return cls._viva_alp
+
+    @classmethod
+    def set_auth_lp(cls, value: bool) -> None:
+        cls._viva_alp = value
+
+    @classmethod
     async def disconnect(cls) -> None:
         cls._is_connected = False
 
@@ -126,19 +138,36 @@ class Client:
                 NetCode.REQ_LOG_WARNING,
                 NetCode.REQ_LOG_ERROR,
             ):
-                await cls._log()
+                cls._log(code, receive_packet)
 
             elif code == NetCode.REQ_AUTH:
+                cls._server_name = receive_packet.get(
+                    "server_name", "Not_Set_Server_Name"
+                )
                 await cls._auth()
 
             elif code == NetCode.REQ_FILE_DOWNLOAD:
-                await cls._download_file()
-
-            elif code == NetCode.END_FILE_DOWNLOAD:
-                cls._is_downloaded = True
+                await cls._download_file(receive_packet)
 
             else:
                 logger.error("Unknown 'code' type from server")
+
+    @classmethod
+    async def send_packet(self, code: NCAnyType, **kwargs: Any) -> None:
+        payload = {"code": code, **kwargs}
+
+        await self.send_raw(msgpack.packb(payload))
+
+    @classmethod
+    async def send_raw(self, data: bytes) -> None:
+        if self._writer is None:
+            raise ValueError("StreamWriter is not set")
+
+        self._writer.write(len(data).to_bytes(4, byteorder="big"))
+        await self._writer.drain()
+
+        self._writer.write(data)
+        await self._writer.drain()
 
     @classmethod
     async def _receive_packet(cls) -> Any:
@@ -148,18 +177,50 @@ class Client:
         packed_data = await cls._reader.readexactly(data_size)
         return msgpack.unpackb(packed_data)
 
-    # async def receive_file(self, file_path: Path) -> None:
-    #    try:
-    #        with file_path.open("wb") as file:
-    #            while True:
-    #                data_size_bytes = await self._reader.readexactly(4)
-    #                data_size = int.from_bytes(data_size_bytes, "big")
-    #
-    #                if data_size == 0:
-    #                    break
-    #
-    #                chunk = await self._reader.readexactly(data_size)
-    #                file.write(chunk)
-    #
-    #    except Exception as e:
-    #        await self.log_error(f"Error receiving file: {e}")
+    @classmethod
+    def _log(cls, code: NCLogType, receive_packet: dict) -> None:
+        msg = receive_packet.get("message", "Not set")
+
+        if code == NetCode.REQ_LOG_DEBUG:
+            logger.debug(msg)
+
+        elif code == NetCode.REQ_LOG_INFO:
+            logger.info(msg)
+
+        elif code == NetCode.REQ_LOG_WARNING:
+            logger.warning(msg)
+
+        elif code == NetCode.REQ_LOG_ERROR:
+            logger.error(msg)
+
+        else:
+            logger.warning(f"Unknown code for log: {receive_packet}")
+
+    @classmethod
+    async def _auth(cls) -> None:
+        if cls._viva_alp:
+            await cls.send_packet(
+                NetCode.ANSWER_AUTH_ALP, login=cls._login, password=cls._password
+            )
+
+        else:
+            await cls.send_packet(
+                NetCode.ANSWER_AUTH_REG, login=cls._login, password=cls._password
+            )
+
+    @classmethod
+    async def _download_file(cls, receive_packet: dict) -> None:
+        try:
+            file_name = receive_packet.get("file_name", None)
+            chunk = receive_packet.get("chunk", None)
+
+            if not chunk or file_name:
+                return
+
+            file_path: Path = cls._content_path / cls._server_name / file_name
+
+            with file_path.open("wb") as file:
+                file.write(chunk)
+
+        except Exception as e:
+            await logger.error(f"Error receiving file: {e}")
