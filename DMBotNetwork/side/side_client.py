@@ -17,9 +17,10 @@ class Client:
     _ear_task: Optional[asyncio.Task] = None  # lol
 
     _viva_alp: bool = True
-    _login: str = None
-    _password: str = None
+    _login: Optional[str] = None
+    _password: Optional[str] = None
     _content_path: Optional[Path] = None
+    _temp_fold: Optional[Path] = None
     _server_name: Optional[str] = None
 
     _is_connected: bool = False
@@ -71,11 +72,15 @@ class Client:
             logger.error(f"Error calling method '{method_name}' in {cls.__name__}: {e}")
 
     @classmethod
-    async def connect(cls, host, port) -> None:
+    async def connect(cls, host: str, port: int) -> None:
+        if not all((cls._login, cls._password, cls._content_path)):
+            logger.warning("Login, password or content_path not set, abort connect")
+            return
+
         cls._reader, cls._writer = await asyncio.open_connection(host, port)
         cls._is_connected = True
 
-        cls._ear_task = asyncio.create_task(cls._ear)
+        cls._ear_task = asyncio.create_task(cls._ear())
 
     @classmethod
     def is_connected(cls) -> bool:
@@ -88,6 +93,24 @@ class Client:
     @classmethod
     def set_auth_lp(cls, value: bool) -> None:
         cls._viva_alp = value
+
+    @classmethod
+    def get_login(cls) -> Optional[str]:
+        return cls._login
+
+    @classmethod
+    def set_login(cls, value: str) -> None:
+        cls._login = value
+
+    @classmethod
+    def set_password(cls, value: str) -> None:
+        cls._password = value
+
+    @classmethod
+    def set_up_content_path(cls, value: Path | str) -> None:
+        cls._content_path = Path(value)
+        cls._temp_fold = cls._content_path / "temp"
+        cls._temp_fold.mkdir(exist_ok=True)
 
     @classmethod
     async def disconnect(cls) -> None:
@@ -144,33 +167,44 @@ class Client:
                 cls._server_name = receive_packet.get(
                     "server_name", "Not_Set_Server_Name"
                 )
+                Path(cls._content_path / cls._server_name).mkdir(exist_ok=True)  # type: ignore
                 await cls._auth()
 
             elif code == NetCode.REQ_FILE_DOWNLOAD:
-                await cls._download_file(receive_packet)
+                cls._download_file(receive_packet)
+
+            elif code == NetCode.END_FILE_DOWNLOAD:
+                cls._move_file(receive_packet)
 
             else:
                 logger.error("Unknown 'code' type from server")
 
     @classmethod
-    async def send_packet(self, code: NCAnyType, **kwargs: Any) -> None:
-        payload = {"code": code, **kwargs}
-
-        await self.send_raw(msgpack.packb(payload))
+    async def req_net(cls, type: str, **kwargs: Any) -> None:
+        await cls.send_packet(NetCode.REQ_NET.value, type=type, **kwargs)
 
     @classmethod
-    async def send_raw(self, data: bytes) -> None:
-        if self._writer is None:
+    async def send_packet(cls, code: NCAnyType, **kwargs: Any) -> None:
+        payload = {"code": code, **kwargs}
+
+        await cls._send_raw(msgpack.packb(payload))  # type: ignore
+
+    @classmethod
+    async def _send_raw(cls, data: bytes) -> None:
+        if cls._writer is None:
             raise ValueError("StreamWriter is not set")
 
-        self._writer.write(len(data).to_bytes(4, byteorder="big"))
-        await self._writer.drain()
+        cls._writer.write(len(data).to_bytes(4, byteorder="big"))
+        await cls._writer.drain()
 
-        self._writer.write(data)
-        await self._writer.drain()
+        cls._writer.write(data)
+        await cls._writer.drain()
 
     @classmethod
     async def _receive_packet(cls) -> Any:
+        if not cls._reader:
+            return
+
         data_size_bytes = await cls._reader.readexactly(4)
         data_size = int.from_bytes(data_size_bytes, "big")
 
@@ -181,16 +215,16 @@ class Client:
     def _log(cls, code: NCLogType, receive_packet: dict) -> None:
         msg = receive_packet.get("message", "Not set")
 
-        if code == NetCode.REQ_LOG_DEBUG:
+        if code == NetCode.REQ_LOG_DEBUG.value:
             logger.debug(msg)
 
-        elif code == NetCode.REQ_LOG_INFO:
+        elif code == NetCode.REQ_LOG_INFO.value:
             logger.info(msg)
 
-        elif code == NetCode.REQ_LOG_WARNING:
+        elif code == NetCode.REQ_LOG_WARNING.value:
             logger.warning(msg)
 
-        elif code == NetCode.REQ_LOG_ERROR:
+        elif code == NetCode.REQ_LOG_ERROR.value:
             logger.error(msg)
 
         else:
@@ -200,16 +234,16 @@ class Client:
     async def _auth(cls) -> None:
         if cls._viva_alp:
             await cls.send_packet(
-                NetCode.ANSWER_AUTH_ALP, login=cls._login, password=cls._password
+                NetCode.ANSWER_AUTH_ALP.value, login=cls._login, password=cls._password
             )
 
         else:
             await cls.send_packet(
-                NetCode.ANSWER_AUTH_REG, login=cls._login, password=cls._password
+                NetCode.ANSWER_AUTH_REG.value, login=cls._login, password=cls._password
             )
 
     @classmethod
-    async def _download_file(cls, receive_packet: dict) -> None:
+    def _download_file(cls, receive_packet: dict) -> None:
         try:
             file_name = receive_packet.get("file_name", None)
             chunk = receive_packet.get("chunk", None)
@@ -217,10 +251,21 @@ class Client:
             if not chunk or file_name:
                 return
 
-            file_path: Path = cls._content_path / cls._server_name / file_name
+            file_path: Path = cls._content_path / cls._temp_fold / file_name  # type: ignore
 
-            with file_path.open("wb") as file:
+            with file_path.open("wb+") as file:
                 file.write(chunk)
 
         except Exception as e:
-            await logger.error(f"Error receiving file: {e}")
+            logger.error(f"Error receiving file: {e}")
+
+    @classmethod
+    def _move_file(cls, receive_packet: dict) -> None:
+        file_name = receive_packet.get("file_name")
+        if not file_name:
+            return
+
+        file_path: Path = cls._content_path / cls._temp_fold / file_name  # type: ignore
+        if file_path.exists():
+            path_serve = cls._content_path / cls._server_name / file_name  # type: ignore
+            file_path.rename(path_serve)

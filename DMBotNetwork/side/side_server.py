@@ -3,7 +3,7 @@ import inspect
 import logging
 from asyncio import StreamReader, StreamWriter
 from pathlib import Path
-from typing import Any, Dict, Optional, Set, get_type_hints
+from typing import Any, Dict, Optional, get_type_hints
 
 from ..units import ClientUnit
 from ..utils import NetCode, ServerDB
@@ -15,11 +15,10 @@ class Server:
     _network_methods: Dict[str, Any] = {}
 
     _connections: Dict[str, ClientUnit] = {}
-    _one_time_token: Set[str] = {}
 
     _allow_registration: bool = True
     _timeout: float = 30.0
-    _server_name: str = None
+    _server_name: Optional[str] = None
 
     _is_online: bool = False
     _main_server: Optional[asyncio.AbstractServer] = None
@@ -75,7 +74,7 @@ class Server:
         cls,
         host: str = "localhost",
         main_port: int = 5000,
-        db_file_path: Path | str = None,
+        db_file_path: Path | str = "",
         base_owner_password: str = "owner_password",
         timeout: float = 30.0,
         allow_registration: bool = True,
@@ -94,6 +93,7 @@ class Server:
 
         cls._allow_registration = allow_registration
         cls._timeout = timeout
+        cls._server_name = server_name
 
         cls._main_server = await asyncio.start_server(
             cls._main_client_handler, host, main_port
@@ -209,7 +209,7 @@ class Server:
     # Auth
     @classmethod
     async def _auth(cls, cl_unit: ClientUnit) -> None:
-        await cl_unit.send_packet(NetCode.REQ_AUTH, server_name=cls._server_name)
+        await cl_unit.send_packet(NetCode.REQ_AUTH.value, server_name=cls._server_name)
         receive_packet = await asyncio.wait_for(cl_unit._receive_packet(), cls._timeout)
 
         if not isinstance(receive_packet, dict):
