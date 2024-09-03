@@ -40,31 +40,31 @@ class ClientUnit:
         return self._writer
 
     @property
-    def reader(self) -> StreamWriter:
+    def reader(self) -> StreamReader:
         return self._reader
 
     # Net
     async def req_net(self, type: str, **kwargs: Any) -> None:
-        await self.send_packet(NetCode.REQ_NET, type=type, **kwargs)
+        await self.send_packet(NetCode.REQ_NET.value, type=type, **kwargs)
 
     # Logs
     async def log_debug(self, message: str) -> None:
-        await self.send_packet(NetCode.REQ_LOG_DEBUG, message=message)
+        await self.send_packet(NetCode.REQ_LOG_DEBUG.value, message=message)
 
     async def log_info(self, message: str) -> None:
-        await self.send_packet(NetCode.REQ_LOG_INFO, message=message)
+        await self.send_packet(NetCode.REQ_LOG_INFO.value, message=message)
 
     async def log_warning(self, message: str) -> None:
-        await self.send_packet(NetCode.REQ_LOG_WARNING, message=message)
+        await self.send_packet(NetCode.REQ_LOG_WARNING.value, message=message)
 
     async def log_error(self, message: str) -> None:
-        await self.send_packet(NetCode.REQ_LOG_ERROR, message=message)
+        await self.send_packet(NetCode.REQ_LOG_ERROR.value, message=message)
 
     # Send
     async def send_packet(self, code: NCAnyType, **kwargs: Any) -> None:
         payload = {"code": code, **kwargs}
 
-        await self.send_raw(msgpack.packb(payload))
+        await self.send_raw(msgpack.packb(payload)) # type: ignore
 
     async def send_raw(self, data: bytes) -> None:
         if self._writer is None:
@@ -88,10 +88,13 @@ class ClientUnit:
                 while True:
                     chunk = file.read(chunk_size)
                     if not chunk:
+                        await self.send_packet(
+                            NetCode.END_FILE_DOWNLOAD.value, file_name=file_name
+                        )
                         break
 
                     await self.send_packet(
-                        NetCode.REQ_FILE_DOWNLOAD, file_name=file_name, chunk=chunk
+                        NetCode.REQ_FILE_DOWNLOAD.value, file_name=file_name, chunk=chunk
                     )
 
         except Exception as e:

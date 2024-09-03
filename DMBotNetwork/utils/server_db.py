@@ -30,7 +30,7 @@ class ServerDB:
         cls._base_access = value
 
     @classmethod
-    def get_db_path(cls) -> Path:
+    def get_db_path(cls) -> Optional[Path]:
         return cls._db_path
 
     @classmethod
@@ -79,6 +79,10 @@ class ServerDB:
 
     @classmethod
     async def _init_exist_user(cls) -> None:
+        if not cls._connection:
+            logger.error("Connection not set")
+            return
+        
         try:
             async with cls._connection.execute("SELECT username FROM users") as cursor:
                 rows = await cursor.fetchall()
@@ -90,6 +94,10 @@ class ServerDB:
 
     @classmethod
     async def _init_owner(cls) -> None:
+        if not cls._connection:
+            logger.error("Connection not set")
+            return
+        
         try:
             if "owner" not in cls._exist_user:
                 owner_password_hashed = await cls._hash_password(
@@ -135,6 +143,10 @@ class ServerDB:
     # Управление пользователями
     @classmethod
     async def login_user(cls, login: str, password: str) -> Optional[str]:
+        if not cls._connection:
+            logger.error("Connection not set")
+            return
+        
         if login not in cls._exist_user:
             raise ValueError(f"User '{login}' not found.")
 
@@ -159,6 +171,10 @@ class ServerDB:
     async def add_user(
         cls, username: str, password: str, access: Optional[Dict[str, bool]] = None
     ) -> None:
+        if not cls._connection:
+            logger.error("Connection not set")
+            return
+        
         if username in cls._exist_user:
             raise ValueError(f"User '{username}' already exists.")
 
@@ -184,6 +200,10 @@ class ServerDB:
 
     @classmethod
     async def delete_user(cls, username: str) -> None:
+        if not cls._connection:
+            logger.error("Connection not set")
+            return
+        
         if username not in cls._exist_user:
             return
 
@@ -202,6 +222,10 @@ class ServerDB:
 
     @classmethod
     async def change_user_password(cls, username: str, new_password: str) -> None:
+        if not cls._connection:
+            logger.error("Connection not set")
+            return        
+        
         if username not in cls._exist_user:
             return
 
@@ -221,8 +245,12 @@ class ServerDB:
     async def change_user_access(
         cls, username: str, new_access: Optional[Dict[str, bool]] = None
     ) -> bool:
+        if not cls._connection:
+            logger.error("Connection not set")
+            return False        
+        
         if username not in cls._exist_user:
-            return
+            return False
 
         if username == "owner":
             new_access = {"full_access": True}
@@ -247,6 +275,10 @@ class ServerDB:
 
     @classmethod
     async def get_access(cls, username: str) -> Optional[Dict[str, bool]]:
+        if not cls._connection:
+            logger.error("Connection not set")
+            return None
+
         if username not in cls._exist_user:
             return None
 
