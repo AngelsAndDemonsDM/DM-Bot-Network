@@ -78,7 +78,7 @@ class ClientUnit:
 
     # File send
     async def send_file(
-        self, file_path: Path, file_name: str, chunk_size: int = 4096
+        self, file_path: Path, file_name: str, chunk_size: int = 8192
     ) -> None:
         if self._writer is None:
             raise ValueError("StreamWriter is not set")

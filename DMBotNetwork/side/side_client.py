@@ -244,6 +244,10 @@ class Client:
 
     @classmethod
     def _download_file(cls, receive_packet: dict) -> None:
+        """Данный метод, как и следующий не являются безопасными.
+        В случае если мы потеряем индекс мы его не найдём.
+        TODO: Сделать передачу файлов более стабильной. А пока что так покатит
+        """
         try:
             file_name = receive_packet.get("file_name", None)
             chunk = receive_packet.get("chunk", None)
@@ -255,7 +259,7 @@ class Client:
             file_root_path: Path = cls._content_path / cls._temp_fold / cls._server_name  # type: ignore
             file_root_path.mkdir(exist_ok=True)
 
-            file_path: Path = file_root_path / f"{file_name}_{index}.bin"
+            file_path: Path = file_root_path / f"{file_name}_{index}.tmp"
 
             with file_path.open("wb") as file:
                 file.write(chunk)
@@ -278,7 +282,7 @@ class Client:
                 logger.error(f"Temp folder {temp_folder_path} does not exist.")
                 return
 
-            file_parts = sorted(temp_folder_path.glob(f"{file_name}_*.bin"))
+            file_parts = sorted(temp_folder_path.glob(f"{file_name}_*.tmp"))
             if not file_parts:
                 logger.error(f"No parts found for {file_name}.")
                 return
@@ -301,4 +305,4 @@ class Client:
             assembled_file_path.rename(destination_path)
 
         except Exception as e:
-            logger.error(f"Error moving assembled file {file_name}: {e}") # type: ignore
+            logger.error(f"Error moving assembled file {file_name}: {e}")  # type: ignore
