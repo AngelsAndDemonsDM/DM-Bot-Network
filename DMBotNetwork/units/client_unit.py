@@ -64,7 +64,7 @@ class ClientUnit:
     async def send_packet(self, code: NCAnyType, **kwargs: Any) -> None:
         payload = {"code": code, **kwargs}
 
-        await self.send_raw(msgpack.packb(payload)) # type: ignore
+        await self.send_raw(msgpack.packb(payload))  # type: ignore
 
     async def send_raw(self, data: bytes) -> None:
         if self._writer is None:
@@ -78,12 +78,14 @@ class ClientUnit:
 
     # File send
     async def send_file(
-        self, file_path: Path, file_name: str, chunk_size: int = 4096
+        self, file_path: Path, file_name: str, chunk_size: int = 8192
     ) -> None:
         if self._writer is None:
             raise ValueError("StreamWriter is not set")
 
         try:
+            index = 0
+
             with file_path.open("rb") as file:
                 while True:
                     chunk = file.read(chunk_size)
@@ -94,8 +96,12 @@ class ClientUnit:
                         break
 
                     await self.send_packet(
-                        NetCode.REQ_FILE_DOWNLOAD.value, file_name=file_name, chunk=chunk
+                        NetCode.REQ_FILE_DOWNLOAD.value,
+                        file_name=file_name,
+                        chunk=chunk,
+                        index=index,
                     )
+                    index += 1
 
         except Exception as e:
             await self.log_error(f"Error sending file: {e}")

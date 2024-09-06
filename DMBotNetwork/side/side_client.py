@@ -244,16 +244,24 @@ class Client:
 
     @classmethod
     def _download_file(cls, receive_packet: dict) -> None:
+        """Данный метод, как и следующий не являются безопасными.
+        В случае если мы потеряем индекс мы его не найдём.
+        TODO: Сделать передачу файлов более стабильной. А пока что так покатит
+        """
         try:
             file_name = receive_packet.get("file_name", None)
             chunk = receive_packet.get("chunk", None)
+            index = receive_packet.get("index", None)
 
-            if not chunk or file_name:
+            if chunk is None or file_name is None or index is None:
                 return
 
-            file_path: Path = cls._content_path / cls._temp_fold / file_name  # type: ignore
+            file_root_path: Path = cls._content_path / cls._temp_fold / cls._server_name  # type: ignore
+            file_root_path.mkdir(exist_ok=True)
 
-            with file_path.open("wb+") as file:
+            file_path: Path = file_root_path / f"{file_name}_{index}.tmp"
+
+            with file_path.open("wb") as file:
                 file.write(chunk)
 
         except Exception as e:
@@ -261,11 +269,40 @@ class Client:
 
     @classmethod
     def _move_file(cls, receive_packet: dict) -> None:
-        file_name = receive_packet.get("file_name")
-        if not file_name:
-            return
+        try:
+            file_name = receive_packet.get("file_name", None)
+            if not file_name:
+                logger.error("No file_name provided in receive_packet.")
+                return
 
-        file_path: Path = cls._content_path / cls._temp_fold / file_name  # type: ignore
-        if file_path.exists():
-            path_serve = cls._content_path / cls._server_name / file_name  # type: ignore
-            file_path.rename(path_serve)
+            temp_folder_path: Path = (
+                cls._content_path / cls._temp_fold / cls._server_name  # type: ignore
+            )
+            if not temp_folder_path.exists():
+                logger.error(f"Temp folder {temp_folder_path} does not exist.")
+                return
+
+            file_parts = sorted(temp_folder_path.glob(f"{file_name}_*.tmp"))
+            if not file_parts:
+                logger.error(f"No parts found for {file_name}.")
+                return
+
+            assembled_file_path: Path = temp_folder_path / file_name
+
+            with assembled_file_path.open("wb") as assembled_file:
+                for part in file_parts:
+                    with part.open("rb") as chunk_file:
+                        assembled_file.write(chunk_file.read())
+
+            for part in file_parts:
+                part.unlink()
+
+            target_folder_path: Path = cls._content_path / cls._server_name  # type: ignore
+            target_folder_path.mkdir(parents=True, exist_ok=True)
+
+            destination_path: Path = target_folder_path / file_name
+
+            assembled_file_path.rename(destination_path)
+
+        except Exception as e:
+            logger.error(f"Error moving assembled file {file_name}: {e}")  # type: ignore

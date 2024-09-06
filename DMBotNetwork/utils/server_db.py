@@ -82,7 +82,7 @@ class ServerDB:
         if not cls._connection:
             logger.error("Connection not set")
             return
-        
+
         try:
             async with cls._connection.execute("SELECT username FROM users") as cursor:
                 rows = await cursor.fetchall()
@@ -97,7 +97,7 @@ class ServerDB:
         if not cls._connection:
             logger.error("Connection not set")
             return
-        
+
         try:
             if "owner" not in cls._exist_user:
                 owner_password_hashed = await cls._hash_password(
@@ -146,7 +146,7 @@ class ServerDB:
         if not cls._connection:
             logger.error("Connection not set")
             return
-        
+
         if login not in cls._exist_user:
             raise ValueError(f"User '{login}' not found.")
 
@@ -174,7 +174,7 @@ class ServerDB:
         if not cls._connection:
             logger.error("Connection not set")
             return
-        
+
         if username in cls._exist_user:
             raise ValueError(f"User '{username}' already exists.")
 
@@ -203,7 +203,7 @@ class ServerDB:
         if not cls._connection:
             logger.error("Connection not set")
             return
-        
+
         if username not in cls._exist_user:
             return
 
@@ -212,20 +212,19 @@ class ServerDB:
                 "DELETE FROM users WHERE username = ?", (username,)
             )
             await cls._connection.commit()
-            
+
             cls._access_cache.pop(username, None)
             cls._exist_user.discard(username)
 
         except Exception as e:
             logger.error(f"Error deleting user {username}: {e}")
 
-
     @classmethod
     async def change_user_password(cls, username: str, new_password: str) -> None:
         if not cls._connection:
             logger.error("Connection not set")
-            return        
-        
+            return
+
         if username not in cls._exist_user:
             return
 
@@ -247,8 +246,8 @@ class ServerDB:
     ) -> bool:
         if not cls._connection:
             logger.error("Connection not set")
-            return False        
-        
+            return False
+
         if username not in cls._exist_user:
             return False
 
