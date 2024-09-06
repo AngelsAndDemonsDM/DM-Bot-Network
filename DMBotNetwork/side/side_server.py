@@ -206,6 +206,24 @@ class Server:
             await cl_unit.close()
             del cls._connections[cl_unit.login]
 
+    @classmethod
+    async def broadcast(cls, func_name: str, *args, **kwargs) -> None:
+        if not cls._connections:
+            logger.warning("No active connections to broadcast")
+            return
+
+        tasks = []
+        for cl_unit in cls._connections.values():
+            func = getattr(cl_unit, func_name, None)
+            if callable(func):
+                tasks.append(func(*args, **kwargs))
+
+            else:
+                logger.error(f"{func_name} is not a callable method of {cl_unit}")
+
+        if tasks:
+            await asyncio.gather(*tasks)
+
     # Auth
     @classmethod
     async def _auth(cls, cl_unit: ClientUnit) -> None:
