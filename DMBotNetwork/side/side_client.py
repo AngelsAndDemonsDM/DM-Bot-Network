@@ -253,7 +253,7 @@ class Client:
 
             file_path: Path = cls._content_path / cls._temp_fold / file_name  # type: ignore
 
-            with file_path.open("wb+") as file:
+            with file_path.open("ab") as file:
                 file.write(chunk)
 
         except Exception as e:
