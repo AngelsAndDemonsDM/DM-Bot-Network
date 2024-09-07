@@ -191,7 +191,7 @@ class Server:
                     await cl_unit.log_error("'code' type expected int")
                     continue
 
-                if code == NetCode.REQ_NET:
+                if code == NetCode.REQ_NET.value:
                     await cls._call_method(
                         receive_packet.get("type", None), cl_unit, **receive_packet
                     )
@@ -243,14 +243,14 @@ class Server:
         if "login" not in receive_packet or "password" not in receive_packet:
             raise ValueError("Get data must has 'login' and 'password' keys")
 
-        if code == NetCode.ANSWER_AUTH_ALP:
+        if code == NetCode.ANSWER_AUTH_ALP.value:
             await ServerDB.login_user(
                 receive_packet["login"], receive_packet["password"]
             )
             cl_unit.login = receive_packet["login"]
             return
 
-        if code == NetCode.ANSWER_AUTH_REG:
+        if code == NetCode.ANSWER_AUTH_REG.value:
             if not cls._allow_registration:
                 raise ValueError("Registration is not allowed")
 

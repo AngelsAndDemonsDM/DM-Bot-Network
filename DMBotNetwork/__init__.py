@@ -3,4 +3,4 @@ from .units import ClientUnit
 from .utils import ServerDB
 
 __all__ = ["Client", "Server", "ClientUnit", "ServerDB"]
-__version__ = "0.1.3"
+__version__ = "0.1.4"

@@ -110,7 +110,7 @@ class Client:
     def set_up_content_path(cls, value: Path | str) -> None:
         cls._content_path = Path(value)
         cls._temp_fold = cls._content_path / "temp"
-        cls._temp_fold.mkdir(exist_ok=True)
+        cls._temp_fold.mkdir(exist_ok=True, parents=True)
 
     @classmethod
     async def disconnect(cls) -> None:
@@ -150,30 +150,30 @@ class Client:
                 logger.error("From server 'code' type expected int")
                 continue
 
-            if code == NetCode.REQ_NET:
+            if code == NetCode.REQ_NET.value:
                 await cls._call_method(
                     receive_packet.get("type", None), **receive_packet
                 )
 
             if code in (
-                NetCode.REQ_LOG_DEBUG,
-                NetCode.REQ_LOG_INFO,
-                NetCode.REQ_LOG_WARNING,
-                NetCode.REQ_LOG_ERROR,
+                NetCode.REQ_LOG_DEBUG.value,
+                NetCode.REQ_LOG_INFO.value,
+                NetCode.REQ_LOG_WARNING.value,
+                NetCode.REQ_LOG_ERROR.value,
             ):
                 cls._log(code, receive_packet)
 
-            elif code == NetCode.REQ_AUTH:
+            elif code == NetCode.REQ_AUTH.value:
                 cls._server_name = receive_packet.get(
                     "server_name", "Not_Set_Server_Name"
                 )
-                Path(cls._content_path / cls._server_name).mkdir(exist_ok=True)  # type: ignore
+                Path(cls._content_path / cls._server_name).mkdir(exist_ok=True, parents=True)  # type: ignore
                 await cls._auth()
 
-            elif code == NetCode.REQ_FILE_DOWNLOAD:
+            elif code == NetCode.REQ_FILE_DOWNLOAD.value:
                 cls._download_file(receive_packet)
 
-            elif code == NetCode.END_FILE_DOWNLOAD:
+            elif code == NetCode.END_FILE_DOWNLOAD.value:
                 cls._move_file(receive_packet)
 
             else:
@@ -257,7 +257,7 @@ class Client:
                 return
 
             file_root_path: Path = cls._content_path / cls._temp_fold / cls._server_name  # type: ignore
-            file_root_path.mkdir(exist_ok=True)
+            file_root_path.mkdir(exist_ok=True, parents=True)
 
             file_path: Path = file_root_path / f"{file_name}_{index}.tmp"
 

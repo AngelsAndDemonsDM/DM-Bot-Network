@@ -5,7 +5,7 @@ from DMBotNetwork.utils.server_db import ServerDB
 class TestServerDB(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp_db_file: Path = Path("temp")
-        self.temp_db_file.mkdir(exist_ok=True)
+        self.temp_db_file.mkdir(exist_ok=True, parents=True)
         ServerDB.set_db_path(self.temp_db_file)
         await ServerDB.start()
 
