@@ -150,30 +150,30 @@ class Client:
                 logger.error("From server 'code' type expected int")
                 continue
 
-            if code == NetCode.REQ_NET:
+            if code == NetCode.REQ_NET.value:
                 await cls._call_method(
                     receive_packet.get("type", None), **receive_packet
                 )
 
             if code in (
-                NetCode.REQ_LOG_DEBUG,
-                NetCode.REQ_LOG_INFO,
-                NetCode.REQ_LOG_WARNING,
-                NetCode.REQ_LOG_ERROR,
+                NetCode.REQ_LOG_DEBUG.value,
+                NetCode.REQ_LOG_INFO.value,
+                NetCode.REQ_LOG_WARNING.value,
+                NetCode.REQ_LOG_ERROR.value,
             ):
                 cls._log(code, receive_packet)
 
-            elif code == NetCode.REQ_AUTH:
+            elif code == NetCode.REQ_AUTH.value:
                 cls._server_name = receive_packet.get(
                     "server_name", "Not_Set_Server_Name"
                 )
                 Path(cls._content_path / cls._server_name).mkdir(exist_ok=True)  # type: ignore
                 await cls._auth()
 
-            elif code == NetCode.REQ_FILE_DOWNLOAD:
+            elif code == NetCode.REQ_FILE_DOWNLOAD.value:
                 cls._download_file(receive_packet)
 
-            elif code == NetCode.END_FILE_DOWNLOAD:
+            elif code == NetCode.END_FILE_DOWNLOAD.value:
                 cls._move_file(receive_packet)
 
             else:
