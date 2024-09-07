@@ -167,7 +167,7 @@ class Client:
                 cls._server_name = receive_packet.get(
                     "server_name", "Not_Set_Server_Name"
                 )
-                Path(cls._content_path / cls._server_name).mkdir(exist_ok=True)  # type: ignore
+                Path(cls._content_path / cls._server_name).mkdir(exist_ok=True, parents=True)  # type: ignore
                 await cls._auth()
 
             elif code == NetCode.REQ_FILE_DOWNLOAD.value:
@@ -257,7 +257,7 @@ class Client:
                 return
 
             file_root_path: Path = cls._content_path / cls._temp_fold / cls._server_name  # type: ignore
-            file_root_path.mkdir(exist_ok=True)
+            file_root_path.mkdir(exist_ok=True, parents=True)
 
             file_path: Path = file_root_path / f"{file_name}_{index}.tmp"
 
