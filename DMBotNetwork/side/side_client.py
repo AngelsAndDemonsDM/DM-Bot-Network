@@ -110,7 +110,7 @@ class Client:
     def set_up_content_path(cls, value: Path | str) -> None:
         cls._content_path = Path(value)
         cls._temp_fold = cls._content_path / "temp"
-        cls._temp_fold.mkdir(exist_ok=True)
+        cls._temp_fold.mkdir(exist_ok=True, parents=True)
 
     @classmethod
     async def disconnect(cls) -> None:
