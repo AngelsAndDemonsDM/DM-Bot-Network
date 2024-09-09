@@ -135,49 +135,58 @@ class Client:
 
     @classmethod
     async def _ear(cls) -> None:
-        while cls._is_connected:
-            receive_packet = await cls._receive_packet()
-            if not isinstance(receive_packet, dict):
-                logger.error("From server data type expected dict")
-                continue
+        try:
+            while cls._is_connected:
+                receive_packet = await cls._receive_packet()
+                if not isinstance(receive_packet, dict):
+                    logger.error("From server data type expected dict")
+                    continue
 
-            code = receive_packet.get("code", None)
-            if not code:
-                logger.error("From server data must has 'code' key")
-                continue
+                code = receive_packet.get("code", None)
+                if not code:
+                    logger.error("From server data must has 'code' key")
+                    continue
 
-            if not isinstance(code, int):
-                logger.error("From server 'code' type expected int")
-                continue
+                if not isinstance(code, int):
+                    logger.error("From server 'code' type expected int")
+                    continue
 
-            if code == NetCode.REQ_NET.value:
-                await cls._call_method(
-                    receive_packet.get("type", None), **receive_packet
-                )
+                if code == NetCode.REQ_NET.value:
+                    await cls._call_method(
+                        receive_packet.get("type", None), **receive_packet
+                    )
 
-            if code in (
-                NetCode.REQ_LOG_DEBUG.value,
-                NetCode.REQ_LOG_INFO.value,
-                NetCode.REQ_LOG_WARNING.value,
-                NetCode.REQ_LOG_ERROR.value,
-            ):
-                cls._log(code, receive_packet)
+                if code in (
+                    NetCode.REQ_LOG_DEBUG.value,
+                    NetCode.REQ_LOG_INFO.value,
+                    NetCode.REQ_LOG_WARNING.value,
+                    NetCode.REQ_LOG_ERROR.value,
+                ):
+                    cls._log(code, receive_packet)
 
-            elif code == NetCode.REQ_AUTH.value:
-                cls._server_name = receive_packet.get(
-                    "server_name", "Not_Set_Server_Name"
-                )
-                Path(cls._content_path / cls._server_name).mkdir(exist_ok=True, parents=True)  # type: ignore
-                await cls._auth()
+                elif code == NetCode.REQ_AUTH.value:
+                    cls._server_name = receive_packet.get(
+                        "server_name", "Not_Set_Server_Name"
+                    )
+                    Path(cls._content_path / cls._server_name).mkdir(  # type: ignore
+                        exist_ok=True, parents=True
+                    )
+                    await cls._auth()
 
-            elif code == NetCode.REQ_FILE_DOWNLOAD.value:
-                cls._download_file(receive_packet)
+                elif code == NetCode.REQ_FILE_DOWNLOAD.value:
+                    cls._download_file(receive_packet)
 
-            elif code == NetCode.END_FILE_DOWNLOAD.value:
-                cls._move_file(receive_packet)
+                elif code == NetCode.END_FILE_DOWNLOAD.value:
+                    cls._move_file(receive_packet)
 
-            else:
-                logger.error("Unknown 'code' type from server")
+                else:
+                    logger.error("Unknown 'code' type from server")
+
+        except Exception as err:
+            logger.debug(err)
+
+        finally:
+            await cls.disconnect()
 
     @classmethod
     async def req_net(cls, type: str, **kwargs: Any) -> None:
