@@ -1,6 +1,6 @@
 import unittest
 from pathlib import Path
-from DMBotNetwork.utils.server_db import ServerDB
+from DMBotNetwork.main.utils.server_db import ServerDB
 
 class TestServerDB(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
