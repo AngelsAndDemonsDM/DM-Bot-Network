@@ -21,14 +21,18 @@ class Server:
     _allow_registration: bool = True
     _timeout: float = 30.0
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-
-        cls._network_funcs = {
-            func[4:]: getattr(cls, func)
-            for func in dir(cls)
-            if callable(getattr(cls, func)) and func.startswith("net_")
-        }
+    @classmethod
+    def register_methods_from_class(cls, external_class):
+        """Регистрация методов с префиксом 'net_' из внешнего класса."""
+        for name, func in inspect.getmembers(
+            external_class, predicate=inspect.isfunction
+        ):
+            if name.startswith("net_"):
+                method_name = name[4:]
+                cls._network_funcs[method_name] = func
+                logger.debug(
+                    f"Registered method '{name}' from {external_class.__name__} as '{method_name}'"
+                )
 
     @classmethod
     async def _call_func(
@@ -69,7 +73,7 @@ class Server:
         cls,
         server_name: str,
         host: str,
-        port: str,
+        port: int,
         db_path: str | Path,
         init_owner_password: str,
         base_access: Dict[str, bool],
@@ -97,10 +101,20 @@ class Server:
 
         await ServerDB.start()
 
-        async with cls._server:
-            cls._is_online = True
-            logger.info("Server start.")
-            await cls._server.serve_forever()
+        try:
+            async with cls._server:
+                cls._is_online = True
+                logger.info("Server start.")
+                await cls._server.serve_forever()
+
+        except asyncio.CancelledError:
+            pass
+
+        except Exception as err:
+            logger.error(f"Error starting server: {err}")
+
+        finally:
+            await cls.stop()
 
     @classmethod
     async def stop(cls) -> None:
@@ -173,8 +187,9 @@ class Server:
                     continue
 
                 if ResponseCode.is_net(code):
+                    func_name = receive_package.pop("net_func_name", None)
                     await cls._call_func(
-                        receive_package.pop("net_func_name", None),
+                        func_name,
                         cl_unit=cl_unit,
                         **receive_package,
                     )
@@ -186,14 +201,16 @@ class Server:
             await cl_unit.send_log_error(f"An unexpected error occurred: {err}")
 
         finally:
-            await cl_unit.disconnect()
             cls._cl_units.pop(cl_unit.login, None)
+            await cl_unit.disconnect()
             logger.info(f"{cl_unit.login} is disconected.")
 
     @classmethod
     async def _auth(cls, cl_unit: ClUnit) -> None:
         await cl_unit.send_package(ResponseCode.AUTH_REQ)
-        receive_package = await asyncio.wait_for(cl_unit.receive_package(), cls._timeout)
+        receive_package = await asyncio.wait_for(
+            cl_unit.receive_package(), cls._timeout
+        )
 
         if not isinstance(receive_package, dict):
             raise ValueError("Receive data type expected dict.")

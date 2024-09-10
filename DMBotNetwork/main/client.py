@@ -15,11 +15,12 @@ logger = logging.getLogger("DMBN:Client")
 
 class Client:
     _network_funcs: Dict[str, Callable] = {}
-    _server_handler_task: Optional[asyncio.Task]
+    _server_handler_task: Optional[asyncio.Task] = None
+    _disconnect_lock = asyncio.Lock()
 
     _server_name: str = "dev_server"
-    _reader: Optional[asyncio.StreamReader]
-    _writer: Optional[asyncio.StreamWriter]
+    _reader: Optional[asyncio.StreamReader] = None
+    _writer: Optional[asyncio.StreamWriter] = None
 
     _is_auth: bool = False
     _is_connected: bool = False
@@ -29,14 +30,18 @@ class Client:
     _use_registration: bool = False
     _content_path: Path = Path("")
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-
-        cls._network_funcs = {
-            func[4:]: getattr(cls, func)
-            for func in dir(cls)
-            if callable(getattr(cls, func)) and func.startswith("net_")
-        }
+    @classmethod
+    def register_methods_from_class(cls, external_class):
+        """Регистрация методов с префиксом 'net_' из внешнего класса."""
+        for name, func in inspect.getmembers(
+            external_class, predicate=inspect.isfunction
+        ):
+            if name.startswith("net_"):
+                method_name = name[4:]
+                cls._network_funcs[method_name] = func
+                logger.debug(
+                    f"Registered method '{name}' from {external_class.__name__} as '{method_name}'"
+                )
 
     @classmethod
     async def _call_func(
@@ -109,7 +114,7 @@ class Client:
         cls._use_registration = use_registration
 
         content_path = Path(content_path)
-        if not content_path.is_dir():
+        if content_path.exists() and not content_path.is_dir():
             raise ValueError(f"{content_path} not a dir")
 
         content_path.mkdir(parents=True, exist_ok=True)
@@ -117,29 +122,44 @@ class Client:
 
     @classmethod
     async def connect(cls, host, port) -> None:
-        cls._reader, cls._writer = await asyncio.open_connection(host, port)
-        cls._is_connected = True
+        try:
+            cls._reader, cls._writer = await asyncio.open_connection(host, port)
+            cls._is_connected = True
 
-        logger.info(f"Connected to {host}:{port}")
+            logger.info(f"Connected to {host}:{port}")
 
-        cls._server_handler_task = asyncio.create_task(cls._server_handler())
+            cls._server_handler_task = asyncio.create_task(cls._server_handler())
+
+        except Exception as err:
+            logger.error(f"Error while connect to sever: {err}")
+            await cls.disconnect()
 
     @classmethod
     async def disconnect(cls) -> None:
-        cls._is_connected = False
-        cls._is_auth = False
+        async with cls._disconnect_lock:
+            cls._is_connected = False
+            cls._is_auth = False
 
-        if cls._writer:
-            cls._writer.close()
-            await cls._writer.wait_closed()
+            if cls._writer:
+                try:
+                    cls._writer.close()
+                    await cls._writer.wait_closed()
 
-        if cls._server_handler_task:
-            cls._server_handler_task.cancel()
-            cls._server_handler_task = None
+                except ConnectionAbortedError:
+                    pass
 
-        download_files = cls._content_path.glob("**/*.download")
-        for file in download_files:
-            file.unlink()
+                except Exception as err:
+                    logger.error(f"Error during disconnect: {err}")
+
+            if cls._server_handler_task:
+                cls._server_handler_task.cancel()
+                cls._server_handler_task = None
+
+            download_files = cls._content_path.glob("**/*.download")
+            for file in download_files:
+                file.unlink()
+
+            logger.info("Disconnected from server")
 
     @classmethod
     async def _server_handler(cls) -> None:
@@ -170,7 +190,11 @@ class Client:
                 else:
                     logger.error(f"Unknown 'code' for net type: {receive_package}")
 
-        except asyncio.CancelledError:
+        except (
+            asyncio.CancelledError,
+            ConnectionAbortedError,
+            asyncio.exceptions.IncompleteReadError,
+        ):
             pass
 
         except Exception as err:
@@ -268,8 +292,10 @@ class Client:
         if not cls._writer:
             raise RuntimeError("Is not connected")
 
-        message_length = len(data)
-        cls._writer.write(message_length.to_bytes(4, "big") + data)
+        cls._writer.write(len(data).to_bytes(4, "big"))
+        await cls._writer.drain()
+
+        cls._writer.write(data)
         await cls._writer.drain()
 
     @classmethod

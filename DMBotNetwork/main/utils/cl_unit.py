@@ -177,8 +177,10 @@ class ClUnit:
         Args:
             data (bytes): Данные для отправки.
         """
-        message_length = len(data)
-        self._writer.write(message_length.to_bytes(4, "big") + data)
+        self._writer.write(len(data).to_bytes(4, "big"))
+        await self._writer.drain()
+
+        self._writer.write(data)
         await self._writer.drain()
 
     async def _receive_raw_data(self) -> bytes:
@@ -193,9 +195,14 @@ class ClUnit:
         return await self._reader.readexactly(data_length)
 
     async def disconnect(self) -> None:
-        """Отключение соединения.
+        """Отключение соединения."""
+        if self._writer:
+            try:
+                self._writer.close()
+                await self._writer.wait_closed()
 
-        Закрывает поток записи и завершает соединение.
-        """
-        self._writer.close()
-        await self._writer.wait_closed()
+            except ConnectionAbortedError:
+                pass
+
+            except Exception as err:
+                raise err
