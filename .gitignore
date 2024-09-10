@@ -27,3 +27,5 @@ dist/*
 
 # tests
 test_dir/*
+test_db_path/*
+client_path/*

@@ -2,6 +2,20 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Start client",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "client_test.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Start server",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "server_test.py",
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Start tests",
             "type": "debugpy",
             "request": "launch",
