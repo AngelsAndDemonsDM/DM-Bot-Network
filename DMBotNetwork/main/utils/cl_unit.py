@@ -1,5 +1,5 @@
+import asyncio
 import json
-from asyncio import StreamReader, StreamWriter
 from pathlib import Path
 
 import aiofiles
@@ -10,7 +10,9 @@ from .response_code import ResponseCode
 class ClUnit:
     __slots__ = ["login", "_reader", "_writer"]
 
-    def __init__(self, login, reader: StreamReader, writer: StreamWriter) -> None:
+    def __init__(
+        self, login, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
         """Инициализация объекта ClUnit.
 
         Args:
@@ -22,8 +24,21 @@ class ClUnit:
         self._reader = reader
         self._writer = writer
 
+    def __eq__(self, value: object) -> bool:
+        if isinstance(value, str):
+            return value == self.login
+
+        elif isinstance(value, ClUnit):
+            return value.login == self.login
+
+        else:
+            return False
+
+    def __hash__(self) -> int:
+        return hash(self.login)
+
     @property
-    def reader(self) -> StreamReader:
+    def reader(self) -> asyncio.StreamReader:
         """Возвращает асинхронный поток для чтения данных.
 
         Returns:
@@ -32,7 +47,7 @@ class ClUnit:
         return self._reader
 
     @property
-    def writer(self) -> StreamWriter:
+    def writer(self) -> asyncio.StreamWriter:
         """Возвращает асинхронный поток для записи данных.
 
         Returns:

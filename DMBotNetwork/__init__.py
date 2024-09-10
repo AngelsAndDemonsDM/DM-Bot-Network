@@ -1,6 +1,4 @@
-from .side import Client, Server
-from .units import ClientUnit
-from .utils import ServerDB
+from .main.server import Server
 
-__all__ = ["Client", "Server", "ClientUnit", "ServerDB"]
-__version__ = "0.1.5"
+__all__ = ["Server"]
+__version__ = "0.2.0"

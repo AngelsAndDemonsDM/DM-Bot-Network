@@ -32,6 +32,10 @@ class ResponseCode(IntEnum):
         }
 
     @classmethod
+    def is_client_auth(cls, code) -> bool:
+        return code in {cls.AUTH_ANS_LOGIN, cls.AUTH_ANS_REGIS}
+
+    @classmethod
     def is_net(cls, code) -> bool:
         return code == cls.NET_REQ
 
