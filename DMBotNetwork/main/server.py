@@ -31,7 +31,7 @@ class Server:
         }
 
     @classmethod
-    async def _call_method(
+    async def _call_func(
         cls,
         func_name: str,
         **kwargs,
@@ -158,6 +158,7 @@ class Server:
             return
 
         cls._cl_units[cl_unit.login] = cl_unit
+        logger.info(f"{cl_unit.login} is connected.")
 
         try:
             while cls._is_online:
@@ -172,7 +173,7 @@ class Server:
                     continue
 
                 if ResponseCode.is_net(code):
-                    await cls._call_method(
+                    await cls._call_func(
                         receive_pakage.pop("net_func_name", None),
                         cl_unit=cl_unit,
                         **receive_pakage,
@@ -187,6 +188,7 @@ class Server:
         finally:
             await cl_unit.disconnect()
             cls._cl_units.pop(cl_unit.login, None)
+            logger.info(f"{cl_unit.login} is disconected.")
 
     @classmethod
     async def _auth(cls, cl_unit: ClUnit) -> None:
