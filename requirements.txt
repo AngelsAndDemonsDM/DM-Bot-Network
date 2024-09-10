@@ -1,4 +1,5 @@
 aiosqlite
+aiofiles
 bcrypt
 msgpack
 setuptools

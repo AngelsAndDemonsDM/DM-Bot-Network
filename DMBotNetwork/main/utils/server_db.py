@@ -7,7 +7,7 @@ import aiosqlite
 import bcrypt
 import msgpack
 
-logger = logging.getLogger("DMBotNetwork Server db")
+logger = logging.getLogger("DMBN:ServerDB")
 
 
 class ServerDB:
@@ -62,6 +62,8 @@ class ServerDB:
         try:
             if cls._db_path is None:
                 raise ValueError("Database path is not set.")
+
+            cls._db_path.mkdir(parents=True, exist_ok=True)
 
             cls._connection = await aiosqlite.connect(cls._db_path / "server.db")
             await cls._connection.execute("""
@@ -150,22 +152,18 @@ class ServerDB:
         if login not in cls._exist_user:
             raise ValueError(f"User '{login}' not found.")
 
-        try:
-            async with cls._connection.execute(
-                "SELECT password FROM users WHERE username = ?", (login,)
-            ) as cursor:
-                row = await cursor.fetchone()
-                if row is None:
-                    raise ValueError(f"User '{login}' not found in database.")
+        async with cls._connection.execute(
+            "SELECT password FROM users WHERE username = ?", (login,)
+        ) as cursor:
+            row = await cursor.fetchone()
 
-                if not await cls._check_password(password, row[0]):
-                    raise ValueError("Incorrect password.")
+            if row is None:
+                raise ValueError(f"User '{login}' not found in database.")
 
-                return login
+            if not await cls._check_password(password, row[0]):
+                raise ValueError("Incorrect password.")
 
-        except Exception as e:
-            logger.error(f"Error logging in user {login}: {e}")
-            return None
+            return login
 
     @classmethod
     async def add_user(
@@ -185,18 +183,13 @@ class ServerDB:
 
         packed_access = msgpack.packb(access)
 
-        try:
-            await cls._connection.execute(
-                "INSERT INTO users (username, password, access) VALUES (?, ?, ?)",
-                (username, hashed_password, packed_access),
-            )
-            await cls._connection.commit()
-            cls._exist_user.add(username)
-            logger.info(f"User '{username}' successfully added.")
-
-        except Exception as err:
-            logger.error(f"Error adding user {username}: {err}")
-            raise err
+        await cls._connection.execute(
+            "INSERT INTO users (username, password, access) VALUES (?, ?, ?)",
+            (username, hashed_password, packed_access),
+        )
+        await cls._connection.commit()
+        cls._exist_user.add(username)
+        logger.info(f"User '{username}' successfully added.")
 
     @classmethod
     async def delete_user(cls, username: str) -> None:
@@ -207,17 +200,13 @@ class ServerDB:
         if username not in cls._exist_user:
             return
 
-        try:
-            await cls._connection.execute(
-                "DELETE FROM users WHERE username = ?", (username,)
-            )
-            await cls._connection.commit()
+        await cls._connection.execute(
+            "DELETE FROM users WHERE username = ?", (username,)
+        )
+        await cls._connection.commit()
 
-            cls._access_cache.pop(username, None)
-            cls._exist_user.discard(username)
-
-        except Exception as e:
-            logger.error(f"Error deleting user {username}: {e}")
+        cls._access_cache.pop(username, None)
+        cls._exist_user.discard(username)
 
     @classmethod
     async def change_user_password(cls, username: str, new_password: str) -> None:
@@ -230,15 +219,12 @@ class ServerDB:
 
         hashed_password = await cls._hash_password(new_password)
 
-        try:
-            await cls._connection.execute(
-                "UPDATE users SET password = ? WHERE username = ?",
-                (hashed_password, username),
-            )
-            await cls._connection.commit()
+        await cls._connection.execute(
+            "UPDATE users SET password = ? WHERE username = ?",
+            (hashed_password, username),
+        )
 
-        except Exception as e:
-            logger.error(f"Error changing password for user {username}: {e}")
+        await cls._connection.commit()
 
     @classmethod
     async def change_user_access(
