@@ -162,21 +162,21 @@ class Server:
 
         try:
             while cls._is_online:
-                receive_pakage = await cl_unit.receive_pakage()
-                if not isinstance(receive_pakage, dict):
+                receive_package = await cl_unit.receive_package()
+                if not isinstance(receive_package, dict):
                     await cl_unit.send_log_error("Receive data type expected dict.")
                     continue
 
-                code = receive_pakage.pop("code", None)
+                code = receive_package.pop("code", None)
                 if not code:
                     await cl_unit.send_log_error("Receive data must has 'code' key.")
                     continue
 
                 if ResponseCode.is_net(code):
                     await cls._call_func(
-                        receive_pakage.pop("net_func_name", None),
+                        receive_package.pop("net_func_name", None),
                         cl_unit=cl_unit,
-                        **receive_pakage,
+                        **receive_package,
                     )
 
                 else:
@@ -192,13 +192,13 @@ class Server:
 
     @classmethod
     async def _auth(cls, cl_unit: ClUnit) -> None:
-        await cl_unit.send_pakage(ResponseCode.AUTH_REQ)
-        receive_pakage = await asyncio.wait_for(cl_unit.receive_pakage(), cls._timeout)
+        await cl_unit.send_package(ResponseCode.AUTH_REQ)
+        receive_package = await asyncio.wait_for(cl_unit.receive_package(), cls._timeout)
 
-        if not isinstance(receive_pakage, dict):
+        if not isinstance(receive_package, dict):
             raise ValueError("Receive data type expected dict.")
 
-        code = receive_pakage.get("code", None)
+        code = receive_package.get("code", None)
         if not code:
             raise ValueError("Receive data must has 'code' key.")
 
@@ -207,8 +207,8 @@ class Server:
         if not ResponseCode.is_client_auth(code):
             raise ValueError("Unknown 'code' for auth type.")
 
-        login = receive_pakage.get("login", None)
-        password = receive_pakage.get("password", None)
+        login = receive_package.get("login", None)
+        password = receive_package.get("password", None)
         if not all([login, password]):
             raise ValueError("Receive data must has 'login' and 'password' keys.")
 
@@ -223,6 +223,6 @@ class Server:
             await ServerDB.login_user(login, password)
             cl_unit.login = login
 
-        await cl_unit.send_pakage(
+        await cl_unit.send_package(
             ResponseCode.AUTH_ANS_SERVE, server_name=cls._server_name
         )

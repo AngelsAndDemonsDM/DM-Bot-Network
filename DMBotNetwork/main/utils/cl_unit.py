@@ -55,7 +55,7 @@ class ClUnit:
         """
         return self._writer
 
-    async def send_pakage(self, code: ResponseCode, **kwargs) -> None:
+    async def send_package(self, code: ResponseCode, **kwargs) -> None:
         """Отправка пакета данных.
 
         Args:
@@ -66,7 +66,7 @@ class ClUnit:
         en_data = self._encode_data(payload)
         await self._send_raw_data(en_data)
 
-    async def receive_pakage(self) -> dict:
+    async def receive_package(self) -> dict:
         """Получение и декодирование пакета данных.
 
         Returns:
@@ -99,10 +99,10 @@ class ClUnit:
             while True:
                 chunk = await file.read(chunk_size)
                 if not chunk:
-                    await self.send_pakage(ResponseCode.FIL_END, name=file_name)
+                    await self.send_package(ResponseCode.FIL_END, name=file_name)
                     break
 
-                await self.send_pakage(
+                await self.send_package(
                     ResponseCode.FIL_REQ, name=file_name, chunk=chunk
                 )
 
@@ -112,7 +112,7 @@ class ClUnit:
         Args:
             message (str): Сообщение для отправки.
         """
-        await self.send_pakage(ResponseCode.LOG_DEB, message=message)
+        await self.send_package(ResponseCode.LOG_DEB, message=message)
 
     async def send_log_info(self, message: str) -> None:
         """Отправка сообщения с уровнем логирования INFO.
@@ -120,7 +120,7 @@ class ClUnit:
         Args:
             message (str): Сообщение для отправки.
         """
-        await self.send_pakage(ResponseCode.LOG_INF, message=message)
+        await self.send_package(ResponseCode.LOG_INF, message=message)
 
     async def send_log_warning(self, message: str) -> None:
         """Отправка сообщения с уровнем логирования WARNING.
@@ -128,7 +128,7 @@ class ClUnit:
         Args:
             message (str): Сообщение для отправки.
         """
-        await self.send_pakage(ResponseCode.LOG_WAR, message=message)
+        await self.send_package(ResponseCode.LOG_WAR, message=message)
 
     async def send_log_error(self, message: str) -> None:
         """Отправка сообщения с уровнем логирования ERROR.
@@ -136,7 +136,7 @@ class ClUnit:
         Args:
             message (str): Сообщение для отправки.
         """
-        await self.send_pakage(ResponseCode.LOG_ERR, message=message)
+        await self.send_package(ResponseCode.LOG_ERR, message=message)
 
     async def req_net_func(self, func_name: str, **kwargs) -> None:
         """Отправка запроса на выполнение сетевой функции.
@@ -145,7 +145,7 @@ class ClUnit:
             func_name (str): Имя функции, которую нужно вызвать на сервере.
             **kwargs: Дополнительные аргументы для функции.
         """
-        await self.send_pakage(ResponseCode.NET_REQ, net_func_name=func_name, **kwargs)
+        await self.send_package(ResponseCode.NET_REQ, net_func_name=func_name, **kwargs)
 
     def _encode_data(self, data: dict) -> bytes:
         """Кодирование данных в JSON-формат.
