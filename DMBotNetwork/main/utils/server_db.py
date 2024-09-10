@@ -62,6 +62,8 @@ class ServerDB:
         try:
             if cls._db_path is None:
                 raise ValueError("Database path is not set.")
+            
+            cls._db_path.mkdir(parents=True, exist_ok=True)
 
             cls._connection = await aiosqlite.connect(cls._db_path / "server.db")
             await cls._connection.execute("""
