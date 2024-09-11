@@ -197,6 +197,13 @@ class Server:
                 else:
                     await cl_unit.send_log_error("Unknown 'code' for net type.")
 
+        except (
+            asyncio.CancelledError,
+            ConnectionAbortedError,
+            asyncio.exceptions.IncompleteReadError,
+        ):
+            pass
+
         except Exception as err:
             await cl_unit.send_log_error(f"An unexpected error occurred: {err}")
 
