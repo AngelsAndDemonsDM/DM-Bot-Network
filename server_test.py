@@ -19,6 +19,7 @@ async def main():
         base_access={},
         allow_registration=False,
         timeout=5.0,
+        max_player=0,
     )
 
     Server.register_methods_from_class(NetClassPong)

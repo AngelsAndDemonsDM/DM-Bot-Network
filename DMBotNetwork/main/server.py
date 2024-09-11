@@ -20,6 +20,7 @@ class Server:
     _server_name: str = "Dev_Server"
     _allow_registration: bool = True
     _timeout: float = 30.0
+    _max_players: int = -1
 
     @classmethod
     def register_methods_from_class(cls, external_class):
@@ -79,10 +80,12 @@ class Server:
         base_access: Dict[str, bool],
         allow_registration: bool,
         timeout: float,
+        max_player: int = -1,  # inf
     ) -> None:
         cls._server_name = server_name
         cls._allow_registration = allow_registration
         cls._timeout = timeout
+        cls._max_players = max_player
 
         ServerDB.set_db_path(db_path)
         ServerDB.set_owner_base_password(init_owner_password)
@@ -197,6 +200,14 @@ class Server:
                 else:
                     await cl_unit.send_log_error("Unknown 'code' for net type.")
 
+        except (
+            asyncio.CancelledError,
+            ConnectionAbortedError,
+            asyncio.exceptions.IncompleteReadError,
+            ConnectionResetError,
+        ):
+            pass
+
         except Exception as err:
             await cl_unit.send_log_error(f"An unexpected error occurred: {err}")
 
@@ -207,6 +218,9 @@ class Server:
 
     @classmethod
     async def _auth(cls, cl_unit: ClUnit) -> None:
+        if cls._max_players != -1 and cls._max_players <= len(cls._cl_units):
+            raise ValueError("Server is full.")
+
         await cl_unit.send_package(ResponseCode.AUTH_REQ)
         receive_package = await asyncio.wait_for(
             cl_unit.receive_package(), cls._timeout
