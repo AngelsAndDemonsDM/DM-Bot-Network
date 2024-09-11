@@ -150,15 +150,14 @@ class Client:
 
                 except Exception as err:
                     logger.error(f"Error during disconnect: {err}")
-            
-            
+
             if cls._server_handler_task:
                 cls._server_handler_task.cancel()
                 cls._server_handler_task = None
 
             cls._writer = None
             cls._reader = None
-            
+
             download_files = cls._content_path.glob("**/*.download")
             for file in download_files:
                 file.unlink()
@@ -198,6 +197,7 @@ class Client:
             asyncio.CancelledError,
             ConnectionAbortedError,
             asyncio.exceptions.IncompleteReadError,
+            ConnectionResetError,
         ):
             pass
 
