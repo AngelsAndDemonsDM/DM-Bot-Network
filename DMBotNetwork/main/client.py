@@ -85,7 +85,7 @@ class Client:
 
         try:
             if inspect.iscoroutinefunction(func):
-                await func(**valid_kwargs)
+                await func(**valid_kwargs) в
 
             else:
                 func(**valid_kwargs)
