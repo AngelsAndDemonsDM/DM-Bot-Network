@@ -85,10 +85,10 @@ class Client:
 
         try:
             if inspect.iscoroutinefunction(func):
-                await func(**valid_kwargs)
+                await func(cls, **valid_kwargs)
 
             else:
-                func(**valid_kwargs)
+                func(cls, **valid_kwargs)
 
         except Exception as e:
             logger.error(f"Error calling method '{func_name}' in {cls.__name__}: {e}")

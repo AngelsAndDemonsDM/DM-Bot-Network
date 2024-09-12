@@ -76,10 +76,10 @@ class Server:
 
         try:
             if inspect.iscoroutinefunction(func):
-                return await func(**valid_kwargs)
+                return await func(cl_unit=cl_unit, **valid_kwargs)
 
             else:
-                return func(**valid_kwargs)
+                return func(cl_unit=cl_unit, **valid_kwargs)
 
         except Exception as e:
             logger.error(f"Error calling method '{func_name}' in {cls.__name__}: {e}")
