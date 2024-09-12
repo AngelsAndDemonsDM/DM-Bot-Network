@@ -3,7 +3,8 @@ import inspect
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Dict, Optional, get_type_hints
+from typing import (Any, Dict, List, Optional, Type, Union, get_args,
+                    get_origin, get_type_hints)
 
 from .utils import ClUnit, ResponseCode, ServerDB
 
@@ -14,6 +15,7 @@ class Server:
     _network_funcs: Dict[str, Callable] = {}
     _cl_units: Dict[str, ClUnit] = {}
     _server: Optional[asyncio.AbstractServer] = None
+    _cl_units_lock = asyncio.Lock()
 
     _is_online: bool = False
 
@@ -23,24 +25,29 @@ class Server:
     _max_players: int = -1
 
     @classmethod
-    def register_methods_from_class(cls, external_class):
+    def register_methods_from_class(cls, external_classes: Type | List[Type]) -> None:
         """Регистрация методов с префиксом 'net_' из внешнего класса."""
-        for name, func in inspect.getmembers(
-            external_class, predicate=inspect.isfunction
-        ):
-            if name.startswith("net_"):
-                method_name = name[4:]
-                cls._network_funcs[method_name] = func
-                logger.debug(
-                    f"Registered method '{name}' from {external_class.__name__} as '{method_name}'"
-                )
+        if not isinstance(external_classes, list):
+            external_classes = [external_classes]
+
+        for external_class in external_classes:
+            for name, func in inspect.getmembers(
+                external_class, predicate=inspect.isfunction
+            ):
+                if name.startswith("net_"):
+                    method_name = name[4:]
+                    cls._network_funcs[method_name] = func
+                    logger.debug(
+                        f"Registered method '{name}' from {external_class.__name__} as '{method_name}'"
+                    )
 
     @classmethod
     async def _call_func(
         cls,
         func_name: str,
+        cl_unit: ClUnit,
         **kwargs,
-    ) -> None:
+    ) -> Any:
         func = cls._network_funcs.get(func_name)
         if func is None:
             logger.debug(f"Network func '{func_name}' not found.")
@@ -53,18 +60,26 @@ class Server:
 
         for arg_name, arg_value in valid_kwargs.items():
             expected_type = type_hints.get(arg_name, Any)
-            if not isinstance(arg_value, expected_type) and expected_type is not Any:
-                logger.error(
-                    f"Type mismatch for argument '{arg_name}': expected {expected_type}, got {type(arg_value)}."
-                )
+            if get_origin(expected_type) is Union:
+                if not isinstance(arg_value, get_args(expected_type)):
+                    await cl_unit.send_log_error(
+                        f"Type mismatch for argument '{arg_name}': expected {expected_type}, got {type(arg_value)}."
+                    )
+                    return
+
+            else:
+                if not isinstance(arg_value, expected_type):
+                    await cl_unit.send_log_error(
+                        f"Type mismatch for argument '{arg_name}': expected {expected_type}, got {type(arg_value)}."
+                    )
                 return
 
         try:
             if inspect.iscoroutinefunction(func):
-                await func(cls, **valid_kwargs)
+                return await func(**valid_kwargs)
 
             else:
-                func(cls, **valid_kwargs)
+                return func(**valid_kwargs)
 
         except Exception as e:
             logger.error(f"Error calling method '{func_name}' in {cls.__name__}: {e}")
@@ -117,7 +132,8 @@ class Server:
             logger.error(f"Error starting server: {err}")
 
         finally:
-            await cls.stop()
+            if cls._is_online:
+                await cls.stop()
 
     @classmethod
     async def stop(cls) -> None:
@@ -126,7 +142,9 @@ class Server:
 
         cls._is_online = False
 
-        asyncio.gather(*(cl_unit.disconnect() for cl_unit in cls._cl_units.values()))
+        await asyncio.gather(
+            *(cl_unit.disconnect() for cl_unit in cls._cl_units.values())
+        )
         cls._cl_units.clear()
 
         if cls._server:
@@ -156,6 +174,10 @@ class Server:
     ) -> None:
         cl_unit = ClUnit("init", reader, writer)
 
+        if not cls._is_online:
+            await cl_unit.send_log_error("Server is shutdown")
+            return
+        
         try:
             await cls._auth(cl_unit)
 
@@ -174,7 +196,9 @@ class Server:
             await cl_unit.disconnect()
             return
 
-        cls._cl_units[cl_unit.login] = cl_unit
+        async with cls._cl_units_lock:
+            cls._cl_units[cl_unit.login] = cl_unit
+
         logger.info(f"{cl_unit.login} is connected.")
 
         try:
@@ -189,12 +213,27 @@ class Server:
                     await cl_unit.send_log_error("Receive data must has 'code' key.")
                     continue
 
-                if ResponseCode.is_net(code):
+                if code == ResponseCode.NET_REQ:
                     func_name = receive_package.pop("net_func_name", None)
                     await cls._call_func(
                         func_name,
-                        cl_unit=cl_unit,
+                        cl_unit,
                         **receive_package,
+                    )
+
+                elif code == ResponseCode.GET_REQ:
+                    func_name = receive_package.pop("net_func_name", None)
+                    get_key = receive_package.pop("net_get_key", None)
+                    if get_key is None:
+                        continue
+                    
+                    data = await cls._call_func(
+                        func_name,
+                        cl_unit,
+                        **receive_package,
+                    )
+                    await cl_unit.send_package(
+                        ResponseCode.GET_REQ, get_key=get_key, data=data
                     )
 
                 else:
@@ -209,10 +248,13 @@ class Server:
             pass
 
         except Exception as err:
+            logger.exception(f"An unexpected error occurred: {err}")
             await cl_unit.send_log_error(f"An unexpected error occurred: {err}")
 
         finally:
-            cls._cl_units.pop(cl_unit.login, None)
+            async with cls._cl_units_lock:
+                cls._cl_units.pop(cl_unit.login, None)
+
             await cl_unit.disconnect()
             logger.info(f"{cl_unit.login} is disconected.")
 

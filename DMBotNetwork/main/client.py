@@ -4,7 +4,8 @@ import json
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Dict, Optional, get_type_hints
+from typing import (Any, Dict, List, Optional, Type, Union, get_args, get_origin,
+                    get_type_hints)
 
 import aiofiles
 
@@ -17,6 +18,9 @@ class Client:
     _network_funcs: Dict[str, Callable] = {}
     _server_handler_task: Optional[asyncio.Task] = None
     _disconnect_lock = asyncio.Lock()
+
+    _data_cache: Dict[str, Any] = {}
+    _waiting_tasks: Dict[str, asyncio.Event] = {}
 
     _server_name: str = "dev_server"
     _reader: Optional[asyncio.StreamReader] = None
@@ -31,17 +35,21 @@ class Client:
     _content_path: Path = Path("")
 
     @classmethod
-    def register_methods_from_class(cls, external_class):
+    def register_methods_from_class(cls, external_classes: Type | List[Type]) -> None:
         """Регистрация методов с префиксом 'net_' из внешнего класса."""
-        for name, func in inspect.getmembers(
-            external_class, predicate=inspect.isfunction
-        ):
-            if name.startswith("net_"):
-                method_name = name[4:]
-                cls._network_funcs[method_name] = func
-                logger.debug(
-                    f"Registered method '{name}' from {external_class.__name__} as '{method_name}'"
-                )
+        if not isinstance(external_classes, list):
+            external_classes = [external_classes]
+
+        for external_class in external_classes:
+            for name, func in inspect.getmembers(
+                external_class, predicate=inspect.isfunction
+            ):
+                if name.startswith("net_"):
+                    method_name = name[4:]
+                    cls._network_funcs[method_name] = func
+                    logger.debug(
+                        f"Registered method '{name}' from {external_class.__name__} as '{method_name}'"
+                    )
 
     @classmethod
     async def _call_func(
@@ -61,18 +69,26 @@ class Client:
 
         for arg_name, arg_value in valid_kwargs.items():
             expected_type = type_hints.get(arg_name, Any)
-            if not isinstance(arg_value, expected_type) and expected_type is not Any:
-                logger.error(
-                    f"Type mismatch for argument '{arg_name}': expected {expected_type}, got {type(arg_value)}."
-                )
+            if get_origin(expected_type) is Union:
+                if not isinstance(arg_value, get_args(expected_type)):
+                    logger.error(
+                        f"Type mismatch for argument '{arg_name}': expected {expected_type}, got {type(arg_value)}."
+                    )
+                    return
+
+            else:
+                if not isinstance(arg_value, expected_type):
+                    logger.error(
+                        f"Type mismatch for argument '{arg_name}': expected {expected_type}, got {type(arg_value)}."
+                    )
                 return
 
         try:
             if inspect.iscoroutinefunction(func):
-                await func(cls, **valid_kwargs)
+                await func(**valid_kwargs)
 
             else:
-                func(cls, **valid_kwargs)
+                func(**valid_kwargs)
 
         except Exception as e:
             logger.error(f"Error calling method '{func_name}' in {cls.__name__}: {e}")
@@ -86,6 +102,31 @@ class Client:
     @classmethod
     async def req_net_func(cls, func_name: str, **kwargs) -> None:
         await cls.send_package(ResponseCode.NET_REQ, net_func_name=func_name, **kwargs)
+
+    @classmethod
+    async def req_get_data(cls, func_name: str, get_key: str, **kwargs) -> Any:
+        if get_key in cls._data_cache:
+            return cls._data_cache.pop(get_key)
+
+        if get_key not in cls._waiting_tasks:
+            cls._waiting_tasks[get_key] = asyncio.Event()
+            await cls.send_package(
+                ResponseCode.GET_REQ,
+                net_func_name=func_name,
+                net_get_key=get_key,
+                **kwargs,
+            )
+
+        await cls._waiting_tasks[get_key].wait()
+        cls._waiting_tasks.pop(get_key, None)
+        return cls._data_cache.pop(get_key)
+
+    @classmethod
+    async def _handle_data_from_server(cls, get_key: str, data: Any) -> None:
+        """Обработка полученных данных от сервера."""
+        cls._data_cache[get_key] = data
+        if get_key in cls._waiting_tasks:
+            cls._waiting_tasks[get_key].set()
 
     @classmethod
     def is_connected(cls) -> bool:
@@ -175,11 +216,17 @@ class Client:
                     logger.error(f"Receive data must has 'code' key: {receive_package}")
                     continue
 
-                if ResponseCode.is_net(code):
+                if code == ResponseCode.NET_REQ:
                     await cls._call_func(
                         receive_package.pop("net_func_name", None),
                         **receive_package,
                     )
+
+                elif code == ResponseCode.GET_REQ:
+                    get_key = receive_package.pop("get_key", None)
+                    data = receive_package.pop("data", None)
+                    if get_key:
+                        await cls._handle_data_from_server(get_key, data)
 
                 elif ResponseCode.is_log(code):
                     cls._log_handler(code, receive_package)
