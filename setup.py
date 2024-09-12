@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="DMBotNetwork",
-    version="0.2.1",
+    version="0.2.2",
     packages=find_packages(),
     install_requires=["aiosqlite", "aiofiles", "bcrypt", "msgpack"],
     author="Angels And Demons dev team",
@@ -16,6 +16,6 @@ setup(
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.11",
+    python_requires=">=3.12",
     license="GPL-3.0",
 )
