@@ -25,7 +25,7 @@ class Server:
     _max_players: int = -1
 
     @classmethod
-    def register_methods_from_class(cls, external_classes: Type | List[Type]):
+    def register_methods_from_class(cls, external_classes: Type | List[Type]) -> None:
         """Регистрация методов с префиксом 'net_' из внешнего класса."""
         if not isinstance(external_classes, list):
             external_classes = [external_classes]

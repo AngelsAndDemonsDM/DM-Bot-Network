@@ -4,7 +4,7 @@ import json
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import (Any, Dict, Optional, Union, get_args, get_origin,
+from typing import (Any, Dict, List, Optional, Type, Union, get_args, get_origin,
                     get_type_hints)
 
 import aiofiles
@@ -35,17 +35,21 @@ class Client:
     _content_path: Path = Path("")
 
     @classmethod
-    def register_methods_from_class(cls, external_class):
+    def register_methods_from_class(cls, external_classes: Type | List[Type]) -> None:
         """Регистрация методов с префиксом 'net_' из внешнего класса."""
-        for name, func in inspect.getmembers(
-            external_class, predicate=inspect.isfunction
-        ):
-            if name.startswith("net_"):
-                method_name = name[4:]
-                cls._network_funcs[method_name] = func
-                logger.debug(
-                    f"Registered method '{name}' from {external_class.__name__} as '{method_name}'"
-                )
+        if not isinstance(external_classes, list):
+            external_classes = [external_classes]
+
+        for external_class in external_classes:
+            for name, func in inspect.getmembers(
+                external_class, predicate=inspect.isfunction
+            ):
+                if name.startswith("net_"):
+                    method_name = name[4:]
+                    cls._network_funcs[method_name] = func
+                    logger.debug(
+                        f"Registered method '{name}' from {external_class.__name__} as '{method_name}'"
+                    )
 
     @classmethod
     async def _call_func(
