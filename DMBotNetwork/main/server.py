@@ -174,6 +174,10 @@ class Server:
     ) -> None:
         cl_unit = ClUnit("init", reader, writer)
 
+        if not cls._is_online:
+            await cl_unit.send_log_error("Server is shutdown")
+            return
+        
         try:
             await cls._auth(cl_unit)
 
