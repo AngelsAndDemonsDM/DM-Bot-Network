@@ -5,7 +5,8 @@ from DMBotNetwork import ClUnit, Server
 
 
 class NetClassPong:
-    async def net_ping(self, cl_unit: ClUnit) -> None:
+    @staticmethod
+    async def net_ping(cl_unit: ClUnit) -> None:
         await cl_unit.send_log_info(f"Pong, {cl_unit.login}!")
 
 
@@ -19,7 +20,7 @@ async def main():
         base_access={},
         allow_registration=False,
         timeout=5.0,
-        max_player=0,
+        max_player=5,
     )
 
     Server.register_methods_from_class(NetClassPong)
