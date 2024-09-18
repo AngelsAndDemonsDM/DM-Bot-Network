@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
 import aiosqlite
 import bcrypt
@@ -281,6 +281,21 @@ class ServerDB:
 
         return None
 
+    @classmethod
+    async def get_all_users(cls) -> List[str]:
+        if not cls._connection:
+            logger.error("Connection not set")
+            return []
+
+        try:
+            async with cls._connection.execute("SELECT username FROM users") as cursor:
+                rows = await cursor.fetchall()
+                return sorted([row[0] for row in rows])
+
+        except Exception as err:
+            logger.error(f"Error fetching all users: {err}")
+            return []
+    
     # Работа с доступами
     @classmethod
     async def check_access_login(cls, username: str, need_access: list[str]) -> bool:
