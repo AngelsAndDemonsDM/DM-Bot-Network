@@ -3,6 +3,7 @@ import base64
 import inspect
 import json
 import logging
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import (Any, Dict, List, Optional, Type, Union, get_args,
@@ -82,7 +83,7 @@ class Client:
                     logger.error(
                         f"Type mismatch for argument '{arg_name}': expected {expected_type}, got {type(arg_value)}."
                     )
-                return
+                    return
 
         try:
             if inspect.iscoroutinefunction(func):
@@ -105,7 +106,10 @@ class Client:
         await cls.send_package(ResponseCode.NET_REQ, net_func_name=func_name, **kwargs)
 
     @classmethod
-    async def req_get_data(cls, func_name: str, get_key: str, **kwargs) -> Any:
+    async def req_get_data(cls, func_name: str, get_key: Optional[str], **kwargs) -> Any:
+        if get_key is None:
+            get_key = str(uuid.uuid4())
+            
         if get_key in cls._data_cache:
             return cls._data_cache.pop(get_key)
 

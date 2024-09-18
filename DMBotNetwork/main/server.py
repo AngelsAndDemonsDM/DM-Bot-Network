@@ -72,7 +72,7 @@ class Server:
                     await cl_unit.send_log_error(
                         f"Type mismatch for argument '{arg_name}': expected {expected_type}, got {type(arg_value)}."
                     )
-                return
+                    return
 
         try:
             if inspect.iscoroutinefunction(func):
