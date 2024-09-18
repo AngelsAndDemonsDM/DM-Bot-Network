@@ -9,7 +9,7 @@ from typing import (Any, Dict, List, Optional, Type, Union, get_args,
                     get_origin, get_type_hints)
 
 import aiofiles
-
+import uuid
 from .utils import ResponseCode
 
 logger = logging.getLogger("DMBN:Client")
@@ -105,7 +105,10 @@ class Client:
         await cls.send_package(ResponseCode.NET_REQ, net_func_name=func_name, **kwargs)
 
     @classmethod
-    async def req_get_data(cls, func_name: str, get_key: str, **kwargs) -> Any:
+    async def req_get_data(cls, func_name: str, get_key: Optional[str], **kwargs) -> Any:
+        if get_key is None:
+            get_key = str(uuid.uuid4())
+            
         if get_key in cls._data_cache:
             return cls._data_cache.pop(get_key)
 
