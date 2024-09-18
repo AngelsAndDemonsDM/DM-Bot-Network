@@ -177,7 +177,7 @@ class Server:
         if not cls._is_online:
             await cl_unit.send_log_error("Server is shutdown")
             return
-        
+
         try:
             await cls._auth(cl_unit)
 
@@ -226,7 +226,7 @@ class Server:
                     get_key = receive_package.pop("net_get_key", None)
                     if get_key is None:
                         continue
-                    
+
                     data = await cls._call_func(
                         func_name,
                         cl_unit,

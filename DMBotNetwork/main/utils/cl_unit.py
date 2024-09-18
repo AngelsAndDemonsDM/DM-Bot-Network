@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 from pathlib import Path
 
@@ -102,8 +103,10 @@ class ClUnit:
                     await self.send_package(ResponseCode.FIL_END, name=file_name)
                     break
 
+                chunk_base64 = base64.b64encode(chunk).decode("utf-8")
+
                 await self.send_package(
-                    ResponseCode.FIL_REQ, name=file_name, chunk=chunk
+                    ResponseCode.FIL_REQ, name=file_name, chunk=chunk_base64
                 )
 
     async def send_log_debug(self, message: str) -> None:

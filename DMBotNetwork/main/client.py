@@ -1,11 +1,12 @@
 import asyncio
+import base64
 import inspect
 import json
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import (Any, Dict, List, Optional, Type, Union, get_args, get_origin,
-                    get_type_hints)
+from typing import (Any, Dict, List, Optional, Type, Union, get_args,
+                    get_origin, get_type_hints)
 
 import aiofiles
 
@@ -131,6 +132,14 @@ class Client:
     @classmethod
     def is_connected(cls) -> bool:
         return cls._is_auth and cls._is_connected
+
+    @classmethod
+    def get_server_name(cls) -> str:
+        return cls._server_name
+
+    @classmethod
+    def get_login(cls) -> str:
+        return cls._login
 
     @classmethod
     def setup(
@@ -297,15 +306,17 @@ class Client:
     async def _file_handler(cls, code: int, receive_package: dict) -> None:
         if code == ResponseCode.FIL_REQ:
             name = receive_package.get("name", None)
-            chunk = receive_package.get("chunk", None)
+            chunk_base64 = receive_package.get("chunk", None)
 
-            if not all([name, chunk]):
+            if not all([name, chunk_base64]):
                 return
 
             file_path: Path = (
                 cls._content_path / cls._server_name / (name + ".download")
             )
             file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            chunk = base64.b64decode(chunk_base64.encode("utf-8"))
 
             async with aiofiles.open(file_path, "ab") as file:
                 await file.write(chunk)
