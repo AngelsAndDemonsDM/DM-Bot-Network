@@ -133,6 +133,14 @@ class Client:
         return cls._is_auth and cls._is_connected
 
     @classmethod
+    def get_server_name(cls) -> str:
+        return cls._server_name
+
+    @classmethod
+    def get_login(cls) -> str:
+        return cls._login
+
+    @classmethod
     def setup(
         cls, login: str, password: str, use_registration: bool, content_path: str | Path
     ) -> None:
