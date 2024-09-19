@@ -3,17 +3,8 @@ import inspect
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Type,
-    Union,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import (Any, Dict, List, Optional, Type, Union, get_args,
+                    get_origin, get_type_hints)
 
 from .utils import ClUnit, ResponseCode, ServerDB
 
