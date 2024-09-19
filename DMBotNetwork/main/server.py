@@ -3,8 +3,17 @@ import inspect
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import (Any, Dict, List, Optional, Type, Union, get_args,
-                    get_origin, get_type_hints)
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Type,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from .utils import ClUnit, ResponseCode, ServerDB
 
@@ -203,41 +212,49 @@ class Server:
 
         try:
             while cls._is_online:
-                receive_package = await cl_unit.receive_package()
-                if not isinstance(receive_package, dict):
-                    await cl_unit.send_log_error("Receive data type expected dict.")
-                    continue
-
-                code = receive_package.pop("code", None)
-                if not code:
-                    await cl_unit.send_log_error("Receive data must has 'code' key.")
-                    continue
-
-                if code == ResponseCode.NET_REQ:
-                    func_name = receive_package.pop("net_func_name", None)
-                    await cls._call_func(
-                        func_name,
-                        cl_unit,
-                        **receive_package,
-                    )
-
-                elif code == ResponseCode.GET_REQ:
-                    func_name = receive_package.pop("net_func_name", None)
-                    get_key = receive_package.pop("net_get_key", None)
-                    if get_key is None:
+                try:
+                    receive_package = await cl_unit.receive_package()
+                    if not isinstance(receive_package, dict):
+                        await cl_unit.send_log_error("Receive data type expected dict.")
                         continue
 
-                    data = await cls._call_func(
-                        func_name,
-                        cl_unit,
-                        **receive_package,
-                    )
-                    await cl_unit.send_package(
-                        ResponseCode.GET_REQ, get_key=get_key, data=data
-                    )
+                    code = receive_package.pop("code", None)
+                    if not code:
+                        await cl_unit.send_log_error(
+                            "Receive data must has 'code' key."
+                        )
+                        continue
 
-                else:
-                    await cl_unit.send_log_error("Unknown 'code' for net type.")
+                    if code == ResponseCode.NET_REQ:
+                        func_name = receive_package.pop("net_func_name", None)
+                        await cls._call_func(
+                            func_name,
+                            cl_unit,
+                            **receive_package,
+                        )
+
+                    elif code == ResponseCode.GET_REQ:
+                        func_name = receive_package.pop("net_func_name", None)
+                        get_key = receive_package.pop("net_get_key", None)
+                        if get_key is None:
+                            continue
+
+                        data = await cls._call_func(
+                            func_name,
+                            cl_unit,
+                            **receive_package,
+                        )
+                        await cl_unit.send_package(
+                            ResponseCode.GET_REQ, get_key=get_key, data=data
+                        )
+
+                    else:
+                        await cl_unit.send_log_error("Unknown 'code' for net type.")
+
+                except PermissionError as err:
+                    await cl_unit.send_log_error(
+                        f"Access error. Insufficient permissions for the following: {err}"
+                    )
 
         except (
             asyncio.CancelledError,
