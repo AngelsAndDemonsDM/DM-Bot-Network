@@ -295,15 +295,15 @@ class ServerDB:
         except Exception as err:
             logger.error(f"Error fetching all users: {err}")
             return []
-    
+
     # Работа с доступами
     @classmethod
-    async def check_access_login(cls, username: str, need_access: list[str]) -> bool:
+    async def check_access_login(cls, username: str, need_access: List[str]) -> bool:
         access_dict = await cls.get_access(username)
         return cls.check_access(access_dict, need_access) if access_dict else False
 
     @staticmethod
-    def check_access(access_dict: Dict[str, bool], need_access: list[str]) -> bool:
+    def check_access(access_dict: Dict[str, bool], need_access: List[str]) -> bool:
         if access_dict.get("full_access", False):
             return True
 
