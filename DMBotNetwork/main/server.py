@@ -110,16 +110,16 @@ class Server:
         logger.info(f"Server setup. Host: {host}, port:{port}.")
 
     @classmethod
-    def set_timeout(cls, value)-> None:
-        pass
-    
+    def set_timeout(cls, value: float) -> None:
+        cls._timeout = value
+
     @classmethod
-    def set_allow_registration(cls, value)-> None:
-        pass
-    
+    def set_allow_registration(cls, value: bool) -> None:
+        cls._allow_registration = value
+
     @classmethod
-    def set_max_players(cls, value)-> None:
-        pass
+    def set_max_players(cls, value: int) -> None:
+        cls._max_players = value
 
     @classmethod
     async def start(cls) -> None:
