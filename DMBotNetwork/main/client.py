@@ -6,12 +6,13 @@ import logging
 import uuid
 from collections.abc import Callable
 from pathlib import Path
-from typing import (Any, Dict, List, Optional, Type, Union, get_args,
-                    get_origin, get_type_hints)
+from typing import (Any, Awaitable, Dict, List, Optional, Type, Union,
+                    get_args, get_origin, get_type_hints)
 
 import aiofiles
 
 from .utils import ResponseCode
+from .utils.states import ClientState
 
 logger = logging.getLogger("DMBN:Client")
 
@@ -28,13 +29,16 @@ class Client:
     _reader: Optional[asyncio.StreamReader] = None
     _writer: Optional[asyncio.StreamWriter] = None
 
-    _is_auth: bool = False
-    _is_connected: bool = False
+    _state: int = ClientState.DISCONNECTED
 
     _login: str = "owner"
     _password: str = "owner_password"
     _use_registration: bool = False
     _content_path: Path = Path("")
+
+    _callback_on_disconect: Optional[
+        Callable[[Optional[str]], Awaitable[None]] | Callable[[Optional[str]], None]
+    ] = None
 
     @classmethod
     def register_methods_from_class(cls, external_classes: Type | List[Type]) -> None:
@@ -106,10 +110,12 @@ class Client:
         await cls.send_package(ResponseCode.NET_REQ, net_func_name=func_name, **kwargs)
 
     @classmethod
-    async def req_get_data(cls, func_name: str, get_key: Optional[str], **kwargs) -> Any:
+    async def req_get_data(
+        cls, func_name: str, get_key: Optional[str], **kwargs
+    ) -> Any:
         if get_key is None:
             get_key = str(uuid.uuid4())
-            
+
         if get_key in cls._data_cache:
             return cls._data_cache.pop(get_key)
 
@@ -135,7 +141,7 @@ class Client:
 
     @classmethod
     def is_connected(cls) -> bool:
-        return cls._is_auth and cls._is_connected
+        return True if cls._state & ClientState.AUTHORIZED else False
 
     @classmethod
     def get_server_name(cls) -> str:
@@ -144,6 +150,15 @@ class Client:
     @classmethod
     def get_login(cls) -> str:
         return cls._login
+
+    @classmethod
+    def set_callback_on_disconect(
+        cls,
+        value: Optional[
+            Callable[[Optional[str]], Awaitable[None]] | Callable[[Optional[str]], None]
+        ] = None,
+    ) -> None:
+        cls._callback_on_disconect = value
 
     @classmethod
     def setup(
@@ -176,9 +191,12 @@ class Client:
 
     @classmethod
     async def connect(cls, host, port) -> None:
+        if not cls._state & ClientState.DISCONNECTED:
+            raise RuntimeError("Already connected")
+
         try:
             cls._reader, cls._writer = await asyncio.open_connection(host, port)
-            cls._is_connected = True
+            cls._state = ClientState.CONNECTED
 
             logger.info(f"Connected to {host}:{port}")
 
@@ -191,8 +209,7 @@ class Client:
     @classmethod
     async def disconnect(cls) -> None:
         async with cls._disconnect_lock:
-            cls._is_connected = False
-            cls._is_auth = False
+            cls._state = ClientState.DISCONNECTED
 
             if cls._writer:
                 try:
@@ -221,13 +238,18 @@ class Client:
     @classmethod
     async def _server_handler(cls) -> None:
         try:
-            while cls._is_connected:
+            while not cls._state & ClientState.DISCONNECTED:
                 receive_package = await cls._receive_package()
 
                 code = receive_package.pop("code", None)
                 if not code:
                     logger.error(f"Receive data must has 'code' key: {receive_package}")
                     continue
+
+                if code == ResponseCode.DISCONNECT:
+                    reason = receive_package.pop("reason", None)
+                    await cls._on_disconect(reason)
+                    break
 
                 if code == ResponseCode.NET_REQ:
                     await cls._call_func(
@@ -268,6 +290,17 @@ class Client:
             await cls.disconnect()
 
     @classmethod
+    async def _on_disconect(cls, reason: Optional[str] = None) -> None:
+        if cls._callback_on_disconect is None:
+            return
+
+        if inspect.iscoroutinefunction(cls._callback_on_disconect):
+            await cls._callback_on_disconect(reason)
+
+        else:
+            cls._callback_on_disconect(reason)
+
+    @classmethod
     def _log_handler(cls, code: int, receive_package: dict) -> None:
         message = receive_package.get("message", None)
         message = f"Server log: {message}"
@@ -303,7 +336,7 @@ class Client:
             if not server_name:
                 return
 
-            cls._is_auth = True
+            cls._state = ClientState.AUTHORIZED
             cls._server_name = server_name
 
     @classmethod

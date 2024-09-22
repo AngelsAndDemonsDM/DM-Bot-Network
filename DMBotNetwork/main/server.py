@@ -19,7 +19,7 @@ class Server:
 
     _is_online: bool = False
 
-    _server_name: str = "Dev_Server"
+    _server_name: str = "dev"
     _allow_registration: bool = True
     _timeout: float = 30.0
     _max_players: int = -1
@@ -110,12 +110,24 @@ class Server:
         logger.info(f"Server setup. Host: {host}, port:{port}.")
 
     @classmethod
+    def set_timeout(cls, value: float) -> None:
+        cls._timeout = value
+
+    @classmethod
+    def set_allow_registration(cls, value: bool) -> None:
+        cls._allow_registration = value
+
+    @classmethod
+    def set_max_players(cls, value: int) -> None:
+        cls._max_players = value
+
+    @classmethod
     async def start(cls) -> None:
         if not cls._server:
-            raise RuntimeError("Server is not initialized.")
+            raise RuntimeError("Server is not initialized")
 
         if cls._is_online:
-            raise RuntimeError("Server already start.")
+            raise RuntimeError("Server already active")
 
         await ServerDB.start()
 
@@ -138,12 +150,15 @@ class Server:
     @classmethod
     async def stop(cls) -> None:
         if not cls._is_online:
-            raise RuntimeError("Server is not working.")
+            raise RuntimeError("Server is inactive")
 
         cls._is_online = False
 
         await asyncio.gather(
-            *(cl_unit.disconnect() for cl_unit in cls._cl_units.values())
+            *(
+                cl_unit.disconnect("Server shutdown")
+                for cl_unit in cls._cl_units.values()
+            )
         )
         cls._cl_units.clear()
 
@@ -175,45 +190,40 @@ class Server:
         cl_unit = ClUnit("init", reader, writer)
 
         if not cls._is_online:
-            await cl_unit.send_log_error("Server is shutdown")
+            await cl_unit.disconnect("Server is inactive")
             return
 
         try:
             await cls._auth(cl_unit)
 
         except TimeoutError:
-            await cl_unit.send_log_error("Timeout for auth.")
-            await cl_unit.disconnect()
+            await cl_unit.disconnect("Timeout for auth")
             return
 
         except ValueError as err:
-            await cl_unit.send_log_error(str(err))
-            await cl_unit.disconnect()
+            await cl_unit.disconnect(str(err))
             return
 
         except Exception as err:
-            await cl_unit.send_log_error(f"An unexpected error occurred: {err}")
-            await cl_unit.disconnect()
+            await cl_unit.disconnect(f"An unexpected error occurred: {err}")
             return
 
         async with cls._cl_units_lock:
             cls._cl_units[cl_unit.login] = cl_unit
 
-        logger.info(f"{cl_unit.login} is connected.")
+        logger.info(f"{cl_unit.login} is connected")
 
         try:
             while cls._is_online:
                 try:
                     receive_package = await cl_unit.receive_package()
                     if not isinstance(receive_package, dict):
-                        await cl_unit.send_log_error("Receive data type expected dict.")
+                        await cl_unit.send_log_error("Receive data type expected dict")
                         continue
 
                     code = receive_package.pop("code", None)
                     if not code:
-                        await cl_unit.send_log_error(
-                            "Receive data must has 'code' key."
-                        )
+                        await cl_unit.send_log_error("Receive data must has 'code' key")
                         continue
 
                     if code == ResponseCode.NET_REQ:
@@ -240,7 +250,7 @@ class Server:
                         )
 
                     else:
-                        await cl_unit.send_log_error("Unknown 'code' for net type.")
+                        await cl_unit.send_log_error("Unknown 'code' for net type")
 
                 except PermissionError as err:
                     await cl_unit.send_log_error(
@@ -252,6 +262,7 @@ class Server:
             ConnectionAbortedError,
             asyncio.exceptions.IncompleteReadError,
             ConnectionResetError,
+            OSError,
         ):
             pass
 
@@ -264,12 +275,12 @@ class Server:
                 cls._cl_units.pop(cl_unit.login, None)
 
             await cl_unit.disconnect()
-            logger.info(f"{cl_unit.login} is disconected.")
+            logger.info(f"{cl_unit.login} is disconected")
 
     @classmethod
     async def _auth(cls, cl_unit: ClUnit) -> None:
         if cls._max_players != -1 and cls._max_players <= len(cls._cl_units):
-            raise ValueError("Server is full.")
+            raise ValueError("Server is full")
 
         await cl_unit.send_package(ResponseCode.AUTH_REQ)
         receive_package = await asyncio.wait_for(
@@ -277,25 +288,25 @@ class Server:
         )
 
         if not isinstance(receive_package, dict):
-            raise ValueError("Receive data type expected dict.")
+            raise ValueError("Receive data type expected dict")
 
         code = receive_package.get("code", None)
         if not code:
-            raise ValueError("Receive data must has 'code' key.")
+            raise ValueError("Receive data must has 'code' key")
 
         code = ResponseCode(code)
 
         if not ResponseCode.is_client_auth(code):
-            raise ValueError("Unknown 'code' for auth type.")
+            raise ValueError("Unknown 'code' for auth type")
 
         login = receive_package.get("login", None)
         password = receive_package.get("password", None)
         if not all([login, password]):
-            raise ValueError("Receive data must has 'login' and 'password' keys.")
+            raise ValueError("Receive data must has 'login' and 'password' keys")
 
         if code == ResponseCode.AUTH_ANS_REGIS:
             if not cls._allow_registration:
-                raise ValueError("Registration is not allowed.")
+                raise ValueError("Registration is not allowed")
 
             await ServerDB.add_user(login, password)
             cl_unit.login = login
