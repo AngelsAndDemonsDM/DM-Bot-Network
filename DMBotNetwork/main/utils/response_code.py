@@ -2,6 +2,9 @@ from enum import IntEnum
 
 
 class ResponseCode(IntEnum):
+    # Системные члены
+    DISCONNECT = 0
+    
     # Авторизация
     AUTH_REQ = 10  # Запрос авторизации от сервера
     AUTH_ANS_LOGIN = 11  # Клиент отправляет запрос на авторизацию

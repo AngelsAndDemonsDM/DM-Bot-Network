@@ -3,6 +3,7 @@ from typing import List
 from .cl_unit import ClUnit
 from .server_db import ServerDB
 
+
 def require_access(req_access: List[str] | str):
     """
     A decorator that ensures the user has the required access level(s) before executing the function.

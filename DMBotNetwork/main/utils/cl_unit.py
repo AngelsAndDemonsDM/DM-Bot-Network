@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 from pathlib import Path
+from typing import Optional
 
 import aiofiles
 
@@ -197,8 +198,11 @@ class ClUnit:
 
         return await self._reader.readexactly(data_length)
 
-    async def disconnect(self) -> None:
+    async def disconnect(self, reason: Optional[str] = None) -> None:
         """Отключение соединения."""
+        if reason is not None:
+            await self.send_package(ResponseCode.DISCONNECT, reason=reason)
+        
         if self._writer:
             try:
                 self._writer.close()
