@@ -199,14 +199,12 @@ class Server:
             await asyncio.gather(*tasks)
 
     @classmethod
-    async def remove_user(cls, login: str, remove_from_db: bool = False) -> None:
-        if remove_from_db:
-            await ServerDB.delete_user(login)
-
+    async def remove_user(cls, login: str) -> None:
+        await ServerDB.delete_user(login)
         cl_unit = cls._cl_units.get(login, None)
 
         if cl_unit is not None:
-            await cl_unit.disconnect("Remove from server")
+            await cl_unit.disconnect("Removed from server")
 
     @classmethod
     async def _cl_handler(
