@@ -110,15 +110,30 @@ class Server:
         logger.info(f"Server setup. Host: {host}, port:{port}.")
 
     @classmethod
+    def get_timeout(cls) -> float:
+        return cls._timeout
+
+    @classmethod
     def set_timeout(cls, value: float) -> None:
         cls._timeout = value
+
+    @classmethod
+    def get_allow_registration(cls) -> bool:
+        return cls._allow_registration
 
     @classmethod
     def set_allow_registration(cls, value: bool) -> None:
         cls._allow_registration = value
 
     @classmethod
+    def get_max_players(cls) -> int:
+        return cls._max_players
+
+    @classmethod
     def set_max_players(cls, value: int) -> None:
+        if value < -1:
+            value = -1
+
         cls._max_players = value
 
     @classmethod
@@ -182,6 +197,14 @@ class Server:
 
         if tasks:
             await asyncio.gather(*tasks)
+
+    @classmethod
+    async def remove_user(cls, login: str) -> None:
+        await ServerDB.delete_user(login)
+        cl_unit = cls._cl_units.get(login, None)
+
+        if cl_unit is not None:
+            await cl_unit.disconnect("Removed from server")
 
     @classmethod
     async def _cl_handler(
