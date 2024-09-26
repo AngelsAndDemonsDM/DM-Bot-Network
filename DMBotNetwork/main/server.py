@@ -3,8 +3,17 @@ import inspect
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import (Any, Dict, List, Optional, Type, Union, get_args,
-                    get_origin, get_type_hints)
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Type,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from .utils import ClUnit, ResponseCode, ServerDB
 
@@ -137,6 +146,33 @@ class Server:
         cls._max_players = value
 
     @classmethod
+    def get_connections(cls) -> Dict[str, ClUnit]:
+        """Изменете список - кастрирую"""
+        return cls._cl_units
+
+    @classmethod
+    async def get_connects_with_access(
+        cls, access: str | List[str]
+    ) -> Dict[str, ClUnit]:
+        if isinstance(access, str):
+            access = [access]
+
+        return_dict: Dict[str, ClUnit] = {}
+
+        tasks = [
+            (login, ServerDB.check_access_login(login, access))
+            for login in cls._cl_units.keys()
+        ]
+
+        results = await asyncio.gather(*[task[1] for task in tasks])
+
+        for (login, _), result in zip(tasks, results):
+            if result:
+                return_dict[login] = cls._cl_units[login]
+
+        return return_dict
+
+    @classmethod
     async def start(cls) -> None:
         if not cls._server:
             raise RuntimeError("Server is not initialized")
@@ -185,9 +221,13 @@ class Server:
         logger.info("Server stop.")
 
     @classmethod
-    async def broadcast(cls, func_name: str, *args, **kwargs) -> None:
+    async def broadcast(cls, func_name: str, cl_units_dict: Optional[Dict[str, ClUnit]] = None, *args, **kwargs) -> None:
         tasks = []
-        for cl_unit in cls._cl_units.values():
+        
+        if cl_units_dict is None:
+            cl_units_dict = cls._cl_units
+        
+        for cl_unit in cl_units_dict.values():
             func = getattr(cl_unit, func_name, None)
             if callable(func):
                 tasks.append(func(*args, **kwargs))
