@@ -209,12 +209,25 @@ class Client:
 
         except Exception as err:
             logger.error(f"Error while connect to sever: {err}")
-            await cls.disconnect()
+            await cls.disconnect(str(err))
 
     @classmethod
-    async def disconnect(cls) -> None:
+    async def _on_disconect(cls, reason: Optional[str] = None) -> None:
+        if cls._callback_on_disconect is None:
+            return
+
+        if inspect.iscoroutinefunction(cls._callback_on_disconect):
+            await cls._callback_on_disconect(reason)
+
+        else:
+            cls._callback_on_disconect(reason)
+
+    @classmethod
+    async def disconnect(cls, reason: Optional[str] = None) -> None:
         async with cls._disconnect_lock:
             cls._state = ClientState.DISCONNECTED
+
+            await cls._on_disconect(reason)
 
             if cls._writer:
                 try:
@@ -243,6 +256,8 @@ class Client:
 
     @classmethod
     async def _server_handler(cls) -> None:
+        reason = None
+
         try:
             while not cls._state & ClientState.DISCONNECTED:
                 receive_package = await cls._receive_package()
@@ -254,7 +269,6 @@ class Client:
 
                 if code == ResponseCode.DISCONNECT:
                     reason = receive_package.pop("reason", None)
-                    await cls._on_disconect(reason)
                     break
 
                 if code == ResponseCode.NET_REQ:
@@ -293,18 +307,7 @@ class Client:
             logger.error(str(err))
 
         finally:
-            await cls.disconnect()
-
-    @classmethod
-    async def _on_disconect(cls, reason: Optional[str] = None) -> None:
-        if cls._callback_on_disconect is None:
-            return
-
-        if inspect.iscoroutinefunction(cls._callback_on_disconect):
-            await cls._callback_on_disconect(reason)
-
-        else:
-            cls._callback_on_disconect(reason)
+            await cls.disconnect(reason)
 
     @classmethod
     def _log_handler(cls, code: int, receive_package: dict) -> None:
