@@ -1,10 +1,8 @@
 from setuptools import find_packages, setup
 
-from DMBotNetwork import __version__
-
 setup(
     name="DMBotNetwork",
-    version=__version__,
+    version="0.3.1",
     packages=find_packages(),
     install_requires=["aiosqlite", "aiofiles", "bcrypt", "msgpack"],
     author="Angels And Demons dev team",
