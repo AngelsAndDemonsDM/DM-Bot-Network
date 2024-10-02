@@ -3,7 +3,7 @@ from enum import IntEnum
 
 class ResponseCode(IntEnum):
     # Системные члены
-    DISCONNECT = 0
+    DISCONNECT = 1
     
     # Авторизация
     AUTH_REQ = 10  # Запрос авторизации от сервера

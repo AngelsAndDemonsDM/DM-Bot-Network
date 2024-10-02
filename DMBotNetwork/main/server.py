@@ -3,17 +3,8 @@ import inspect
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Type,
-    Union,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import (Any, Dict, List, Optional, Type, Union, get_args,
+                    get_origin, get_type_hints)
 
 from .utils import ClUnit, ResponseCode, ServerDB
 
@@ -221,12 +212,18 @@ class Server:
         logger.info("Server stop.")
 
     @classmethod
-    async def broadcast(cls, func_name: str, cl_units_dict: Optional[Dict[str, ClUnit]] = None, *args, **kwargs) -> None:
+    async def broadcast(
+        cls,
+        func_name: str,
+        cl_units_dict: Optional[Dict[str, ClUnit]] = None,
+        *args,
+        **kwargs,
+    ) -> None:
         tasks = []
-        
+
         if cl_units_dict is None:
             cl_units_dict = cls._cl_units
-        
+
         for cl_unit in cl_units_dict.values():
             func = getattr(cl_unit, func_name, None)
             if callable(func):
