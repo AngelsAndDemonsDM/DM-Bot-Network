@@ -35,6 +35,7 @@ class Client:
     _password: str = "owner_password"
     _use_registration: bool = False
     _content_path: Path = Path("")
+    _access: Dict[str, bool] = {}
 
     _callback_on_disconect: Optional[
         Callable[[Optional[str]], Awaitable[None]] | Callable[[Optional[str]], None]
@@ -152,6 +153,10 @@ class Client:
         return cls._login
 
     @classmethod
+    def get_access(cls) -> Dict[str, bool]:
+        return cls._access.copy()
+
+    @classmethod
     def set_callback_on_disconect(
         cls,
         value: Optional[
@@ -228,6 +233,7 @@ class Client:
 
             cls._writer = None
             cls._reader = None
+            cls._access = {}
 
             download_files = cls._content_path.glob("**/*.download")
             for file in download_files:
@@ -338,6 +344,10 @@ class Client:
 
             cls._state = ClientState.AUTHORIZED
             cls._server_name = server_name
+
+        cls._access = await cls.req_get_data(
+            "get_access", None, login=cls._login
+        )  # По хорошему я get_access должен вынести в сервер, но мне похуй. # WARNING!
 
     @classmethod
     async def _file_handler(cls, code: int, receive_package: dict) -> None:
