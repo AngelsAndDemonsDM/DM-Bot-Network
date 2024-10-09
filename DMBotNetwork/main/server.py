@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import (Any, Dict, List, Optional, Type, Union, get_args,
                     get_origin, get_type_hints)
 
+import aiohttp
+
 from .utils import ClUnit, ResponseCode, ServerDB
 
 logger = logging.getLogger("DMBN:Server")
@@ -19,10 +21,20 @@ class Server:
 
     _is_online: bool = False
 
+    _host: str = ""
+    _port: int = 0
     _server_name: str = "dev"
+    _server_desc: str = "None"
+    _server_tags: List[str] = []
+    _server_additional_links: Dict[str, str] = {}
+
     _allow_registration: bool = True
     _timeout: float = 30.0
     _max_players: int = -1
+
+    _hub_list: List[aiohttp.ClientSession] = []
+    _update_task_time: float = 240
+    _update_task_ref = None
 
     @classmethod
     def register_methods_from_class(cls, external_classes: Type | List[Type]) -> None:
@@ -106,6 +118,9 @@ class Server:
         ServerDB.set_owner_base_password(init_owner_password)
         ServerDB.set_base_access(base_access)
 
+        cls._host = host
+        cls._port = port
+
         cls._server = await asyncio.start_server(cls._cl_handler, host, port)
         logger.info(f"Server setup. Host: {host}, port:{port}.")
 
@@ -126,6 +141,10 @@ class Server:
         cls._allow_registration = value
 
     @classmethod
+    def get_players_count(cls) -> int:
+        return len(cls._cl_units)
+
+    @classmethod
     def get_max_players(cls) -> int:
         return cls._max_players
 
@@ -135,6 +154,27 @@ class Server:
             value = -1
 
         cls._max_players = value
+
+    @classmethod
+    async def set_server_desc(cls, value: str) -> None:
+        cls._server_desc = value
+
+        if cls._is_online:
+            await cls._update_server_on_hubs({"desc": value})
+
+    @classmethod
+    async def set_server_tags(cls, value: List[str]) -> None:
+        cls._server_tags = value
+
+        if cls._is_online:
+            await cls._update_server_on_hubs({"tags": value})
+
+    @classmethod
+    async def set_server_additional_links(cls, value: Dict[str, str]) -> None:
+        cls._server_additional_links = value
+
+        if cls._is_online:
+            await cls._update_server_on_hubs({"additional_links": value})
 
     @classmethod
     def get_connections(cls) -> Dict[str, ClUnit]:
@@ -174,6 +214,9 @@ class Server:
         await ServerDB.start()
 
         try:
+            await cls._add_server_to_hubs()
+            cls._start_update_task()
+
             async with cls._server:
                 cls._is_online = True
                 logger.info("Server start.")
@@ -195,6 +238,12 @@ class Server:
             raise RuntimeError("Server is inactive")
 
         cls._is_online = False
+
+        await cls._stop_update_task()
+
+        await cls._delete_server_from_hubs()
+        for hub in cls._hub_list:
+            await hub.close()
 
         await asyncio.gather(
             *(
@@ -322,7 +371,6 @@ class Server:
             ConnectionAbortedError,
             asyncio.exceptions.IncompleteReadError,
             ConnectionResetError,
-            OSError,
         ):
             pass
 
@@ -336,6 +384,7 @@ class Server:
 
             await cl_unit.disconnect()
             logger.info(f"{cl_unit.login} is disconected")
+            await cls._update_server_on_hubs({"cur_players": len(cls._cl_units)})
 
     @classmethod
     async def _auth(cls, cl_unit: ClUnit) -> None:
@@ -378,3 +427,81 @@ class Server:
         await cl_unit.send_package(
             ResponseCode.AUTH_ANS_SERVE, server_name=cls._server_name
         )
+        await cls._update_server_on_hubs({"cur_players": len(cls._cl_units)})
+
+    @classmethod
+    async def add_hub(cls, url):
+        hub = aiohttp.ClientSession(url)
+        cls._hub_list.append(hub)
+
+        if cls._is_online:
+            data = {
+                "ip": cls._host,
+                "port": str(cls._port),
+                "name": cls._server_name,
+                "max_players": cls._max_players,
+                "cur_players": len(cls._cl_units),
+                "desc": cls._server_desc,
+                "tags": cls._server_tags,
+                "additional_links": cls._server_additional_links,
+            }
+
+            async with hub.post("/servers/add", json=data) as response:
+                response_data = await response.json()
+                if "token" in response_data:
+                    hub.headers.update(
+                        {"Authorization": f"Bearer {response_data['token']}"}
+                    )
+
+    @classmethod
+    async def _add_server_to_hubs(cls) -> None:
+        data = {
+            "ip": cls._host,
+            "port": str(cls._port),
+            "name": cls._server_name,
+            "max_players": cls._max_players,
+            "cur_players": len(cls._cl_units),
+            "desc": cls._server_desc,
+            "tags": cls._server_tags,
+            "additional_links": cls._server_additional_links,
+        }
+
+        for hub in cls._hub_list:
+            async with hub.post("/servers/add/", json=data) as response:
+                response_data = await response.json()
+                if "token" in response_data:
+                    hub.headers.update(
+                        {"Authorization": f"Bearer {response_data['token']}"}
+                    )
+
+    @classmethod
+    async def _update_server_on_hubs(cls, data: Dict[str, Any]) -> None:
+        for hub in cls._hub_list:
+            await hub.put(f"/servers/{cls._server_name}/update/", json=data)
+
+    @classmethod
+    async def _update_task_logic(cls) -> None:
+        while cls._is_online:
+            await cls._update_server_on_hubs({"cur_players": len(cls._cl_units)})
+            await asyncio.sleep(cls._update_task_time)
+
+    @classmethod
+    def _start_update_task(cls):
+        cls._update_task_ref = asyncio.create_task(cls._update_task_logic())
+
+    @classmethod
+    async def _stop_update_task(cls):
+        if cls._update_task_ref is not None:
+            cls._update_task_ref.cancel()
+            try:
+                await cls._update_task_ref
+
+            except asyncio.CancelledError:
+                pass
+
+            cls._update_task_ref = None
+
+    @classmethod
+    async def _delete_server_from_hubs(cls) -> None:
+        for hub in cls._hub_list:
+            await hub.delete(f"/servers/{cls._server_name}/delete/")
