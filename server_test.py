@@ -11,6 +11,8 @@ class NetClassPong:
 
 
 async def main():
+    await Server.add_hub("http://194.87.94.191:8000")
+
     await Server.setup_server(
         server_name="test_server_name",
         host="localhost",

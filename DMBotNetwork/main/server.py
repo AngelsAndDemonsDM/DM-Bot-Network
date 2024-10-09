@@ -3,8 +3,17 @@ import inspect
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import (Any, Dict, List, Optional, Type, Union, get_args,
-                    get_origin, get_type_hints)
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Type,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 import aiohttp
 
@@ -237,6 +246,8 @@ class Server:
         cls._is_online = False
 
         await cls._delete_server_from_hubs()
+        for hub in cls._hub_list:
+            await hub.close()
 
         await asyncio.gather(
             *(
@@ -430,7 +441,7 @@ class Server:
         if cls._is_online:
             data = {
                 "ip": cls._host,
-                "port": cls._port,
+                "port": str(cls._port),
                 "name": cls._server_name,
                 "max_players": cls._max_players,
                 "cur_players": len(cls._cl_units),
@@ -450,7 +461,7 @@ class Server:
     async def _add_server_to_hubs(cls) -> None:
         data = {
             "ip": cls._host,
-            "port": cls._port,
+            "port": str(cls._port),
             "name": cls._server_name,
             "max_players": cls._max_players,
             "cur_players": len(cls._cl_units),
@@ -460,7 +471,7 @@ class Server:
         }
 
         for hub in cls._hub_list:
-            async with hub.post("/servers/add", json=data) as response:
+            async with hub.post("/servers/add/", json=data) as response:
                 response_data = await response.json()
                 if "token" in response_data:
                     hub.headers.update(
@@ -470,9 +481,9 @@ class Server:
     @classmethod
     async def _update_server_on_hubs(cls, data: Dict[str, Any]) -> None:
         for hub in cls._hub_list:
-            await hub.put(f"/servers/{cls._server_name}/update", json=data)
+            await hub.put(f"/servers/{cls._server_name}/update/", json=data)
 
     @classmethod
     async def _delete_server_from_hubs(cls) -> None:
         for hub in cls._hub_list:
-            await hub.delete(f"/servers/{cls._server_name}/delete")
+            await hub.delete(f"/servers/{cls._server_name}/delete/")
