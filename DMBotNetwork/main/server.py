@@ -126,6 +126,10 @@ class Server:
         cls._allow_registration = value
 
     @classmethod
+    def get_players_count(cls) -> int:
+        return len(cls._cl_units)
+    
+    @classmethod
     def get_max_players(cls) -> int:
         return cls._max_players
 
@@ -322,7 +326,6 @@ class Server:
             ConnectionAbortedError,
             asyncio.exceptions.IncompleteReadError,
             ConnectionResetError,
-            OSError,
         ):
             pass
 
