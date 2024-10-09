@@ -3,17 +3,8 @@ import inspect
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Type,
-    Union,
-    get_args,
-    get_origin,
-    get_type_hints,
-)
+from typing import (Any, Dict, List, Optional, Type, Union, get_args,
+                    get_origin, get_type_hints)
 
 import aiohttp
 
@@ -42,6 +33,8 @@ class Server:
     _max_players: int = -1
 
     _hub_list: List[aiohttp.ClientSession] = []
+    _update_task_time: float = 240
+    _update_task_ref = None
 
     @classmethod
     def register_methods_from_class(cls, external_classes: Type | List[Type]) -> None:
@@ -222,6 +215,7 @@ class Server:
 
         try:
             await cls._add_server_to_hubs()
+            cls._start_update_task()
 
             async with cls._server:
                 cls._is_online = True
@@ -244,6 +238,8 @@ class Server:
             raise RuntimeError("Server is inactive")
 
         cls._is_online = False
+
+        await cls._stop_update_task()
 
         await cls._delete_server_from_hubs()
         for hub in cls._hub_list:
@@ -482,6 +478,28 @@ class Server:
     async def _update_server_on_hubs(cls, data: Dict[str, Any]) -> None:
         for hub in cls._hub_list:
             await hub.put(f"/servers/{cls._server_name}/update/", json=data)
+
+    @classmethod
+    async def _update_task_logic(cls) -> None:
+        while cls._is_online:
+            await cls._update_server_on_hubs({"cur_players": len(cls._cl_units)})
+            await asyncio.sleep(cls._update_task_time)
+
+    @classmethod
+    def _start_update_task(cls):
+        cls._update_task_ref = asyncio.create_task(cls._update_task_logic())
+
+    @classmethod
+    async def _stop_update_task(cls):
+        if cls._update_task_ref is not None:
+            cls._update_task_ref.cancel()
+            try:
+                await cls._update_task_ref
+
+            except asyncio.CancelledError:
+                pass
+
+            cls._update_task_ref = None
 
     @classmethod
     async def _delete_server_from_hubs(cls) -> None:
