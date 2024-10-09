@@ -9,7 +9,7 @@ setup(
     name="DMBotNetwork",
     version=__version__,
     packages=find_packages(),
-    install_requires=["aiosqlite", "aiofiles", "bcrypt", "msgpack"],
+    install_requires=["aiosqlite", "aiohttp", "aiofiles", "bcrypt", "msgpack"],
     author="Angels And Demons dev team",
     author_email="dm.bot.adm@gmail.com",
     description="Нэткод для проектов DMBot",
