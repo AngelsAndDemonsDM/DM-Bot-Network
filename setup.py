@@ -1,13 +1,23 @@
 from setuptools import find_packages, setup
+from pathlib import Path
 
-from DMBotNetwork import __version__
 
-with open("README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+def read_version():
+    init_file = Path("DMBotNetwork") / "version.py"
+    with init_file.open("r", encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("__version__"):
+                delim = '"' if '"' in line else "'"
+                return line.split(delim)[1]
+
+    raise RuntimeError("Не удалось прочитать версию.")
+
+
+long_description = Path("README.md").read_text(encoding="utf-8")
 
 setup(
     name="DMBotNetwork",
-    version=__version__,
+    version=read_version(),
     packages=find_packages(),
     install_requires=["aiosqlite", "aiohttp", "aiofiles", "bcrypt", "msgpack"],
     author="Angels And Demons dev team",
